@@ -1,0 +1,529 @@
+package agora.vista;
+
+import agora.modelo.Asistente;
+import agora.modelo.Evento;
+import agora.persistencia.PersistenciaTXT;
+import agora.servicio.GestorEventos;
+
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
+import java.awt.*;
+import java.io.IOException;
+import java.time.LocalDate;
+import java.time.LocalTime;
+
+public class InterfazPrincipal extends JFrame {
+
+    private final GestorEventos gestor;
+    private final PersistenciaTXT persistencia;
+    private final DefaultListModel<Evento> modeloEventos;
+    private final JList<Evento> listaEventos;
+
+    public InterfazPrincipal() {
+        gestor = new GestorEventos();
+        persistencia = new PersistenciaTXT("datos");
+        modeloEventos = new DefaultListModel<>();
+        listaEventos = new JList<>(modeloEventos);
+
+        configurarVentana();
+        crearContenido();
+        cargarDatos();
+        actualizarListaEventos();
+    }
+
+    private void configurarVentana() {
+        setTitle("ÁGORA Producciones - Gestión de eventos");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(950, 520);
+        setLocationRelativeTo(null);
+    }
+
+    private void crearContenido() {
+        JPanel panelPrincipal = new JPanel(new BorderLayout(10, 10));
+        panelPrincipal.setBorder(new EmptyBorder(20, 20, 20, 20));
+
+        JLabel titulo = new JLabel("Eventos programados");
+        titulo.setFont(new Font("SansSerif", Font.BOLD, 24));
+
+        listaEventos.setFont(new Font("SansSerif", Font.PLAIN, 15));
+        listaEventos.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+
+        JScrollPane scrollEventos = new JScrollPane(listaEventos);
+
+        JButton botonAgregar = new JButton("Agregar evento");
+        JButton botonEditar = new JButton("Editar evento");
+        JButton botonDetalle = new JButton("Ver detalle");
+        JButton botonAsistente = new JButton("Inscribir asistente");
+        JButton botonEliminar = new JButton("Eliminar evento");
+
+        botonAgregar.addActionListener(
+                e -> mostrarFormularioNuevoEvento()
+        );
+
+        botonEditar.addActionListener(
+                e -> editarEventoSeleccionado()
+        );
+
+        botonDetalle.addActionListener(
+                e -> mostrarDetalleEvento()
+        );
+
+        botonAsistente.addActionListener(
+                e -> inscribirAsistente()
+        );
+
+        botonEliminar.addActionListener(
+                e -> eliminarEventoSeleccionado()
+        );
+
+        JPanel panelBotones = new JPanel(
+                new FlowLayout(FlowLayout.RIGHT)
+        );
+
+        panelBotones.add(botonAgregar);
+        panelBotones.add(botonEditar);
+        panelBotones.add(botonDetalle);
+        panelBotones.add(botonAsistente);
+        panelBotones.add(botonEliminar);
+
+        panelPrincipal.add(titulo, BorderLayout.NORTH);
+        panelPrincipal.add(scrollEventos, BorderLayout.CENTER);
+        panelPrincipal.add(panelBotones, BorderLayout.SOUTH);
+
+        setContentPane(panelPrincipal);
+    }
+
+    private void cargarDatos() {
+        try {
+            persistencia.cargarDatos(gestor);
+
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(
+                    this,
+                    "No se pudieron cargar los datos guardados.",
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE
+            );
+        }
+    }
+
+    private void actualizarListaEventos() {
+        modeloEventos.clear();
+
+        for (Evento evento : gestor.obtenerEventosOrdenados()) {
+            modeloEventos.addElement(evento);
+        }
+    }
+
+    private void mostrarFormularioNuevoEvento() {
+        JTextField campoNombre = new JTextField();
+        JTextField campoDescripcion = new JTextField();
+        JTextField campoUbicacion = new JTextField();
+        JTextField campoFecha = new JTextField("2026-11-11");
+        JTextField campoHoraInicio = new JTextField("11:00");
+        JTextField campoHoraFin = new JTextField("13:00");
+        JTextField campoCapacidad = new JTextField("100");
+
+        JPanel formulario = crearFormularioEvento(
+                campoNombre,
+                campoDescripcion,
+                campoUbicacion,
+                campoFecha,
+                campoHoraInicio,
+                campoHoraFin,
+                campoCapacidad
+        );
+
+        int resultado = JOptionPane.showConfirmDialog(
+                this,
+                formulario,
+                "Agregar evento",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE
+        );
+
+        if (resultado != JOptionPane.OK_OPTION) {
+            return;
+        }
+
+        try {
+            Evento evento = new Evento(
+                    gestor.obtenerSiguienteIdEvento(),
+                    campoNombre.getText().trim(),
+                    campoDescripcion.getText().trim(),
+                    campoUbicacion.getText().trim(),
+                    LocalDate.parse(campoFecha.getText().trim()),
+                    LocalTime.parse(campoHoraInicio.getText().trim()),
+                    LocalTime.parse(campoHoraFin.getText().trim()),
+                    Integer.parseInt(campoCapacidad.getText().trim())
+            );
+
+            gestor.registrarEvento(evento);
+            persistencia.guardarDatos(gestor);
+            actualizarListaEventos();
+
+            JOptionPane.showMessageDialog(
+                    this,
+                    "El evento fue registrado correctamente."
+            );
+
+        } catch (IOException e) {
+            mostrarErrorArchivos();
+
+        } catch (RuntimeException e) {
+            mostrarErrorDatos(e);
+        }
+    }
+
+    private void editarEventoSeleccionado() {
+        Evento evento = listaEventos.getSelectedValue();
+
+        if (evento == null) {
+            mostrarAvisoSeleccion();
+            return;
+        }
+
+        JTextField campoNombre =
+                new JTextField(evento.getNombre());
+
+        JTextField campoDescripcion =
+                new JTextField(evento.getDescripcion());
+
+        JTextField campoUbicacion =
+                new JTextField(evento.getUbicacion());
+
+        JTextField campoFecha =
+                new JTextField(evento.getFecha().toString());
+
+        JTextField campoHoraInicio =
+                new JTextField(evento.getHoraInicio().toString());
+
+        JTextField campoHoraFin =
+                new JTextField(evento.getHoraFin().toString());
+
+        JTextField campoCapacidad =
+                new JTextField(String.valueOf(evento.getCapacidad()));
+
+        JPanel formulario = crearFormularioEvento(
+                campoNombre,
+                campoDescripcion,
+                campoUbicacion,
+                campoFecha,
+                campoHoraInicio,
+                campoHoraFin,
+                campoCapacidad
+        );
+
+        int resultado = JOptionPane.showConfirmDialog(
+                this,
+                formulario,
+                "Editar evento",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE
+        );
+
+        if (resultado != JOptionPane.OK_OPTION) {
+            return;
+        }
+
+        try {
+            evento.actualizarDatos(
+                    campoNombre.getText().trim(),
+                    campoDescripcion.getText().trim(),
+                    campoUbicacion.getText().trim(),
+                    LocalDate.parse(campoFecha.getText().trim()),
+                    LocalTime.parse(campoHoraInicio.getText().trim()),
+                    LocalTime.parse(campoHoraFin.getText().trim()),
+                    Integer.parseInt(campoCapacidad.getText().trim())
+            );
+
+            persistencia.guardarDatos(gestor);
+            actualizarListaEventos();
+
+            JOptionPane.showMessageDialog(
+                    this,
+                    "El evento fue actualizado correctamente."
+            );
+
+        } catch (IOException e) {
+            mostrarErrorArchivos();
+
+        } catch (RuntimeException e) {
+            mostrarErrorDatos(e);
+        }
+    }
+
+    private void inscribirAsistente() {
+        Evento evento = listaEventos.getSelectedValue();
+
+        if (evento == null) {
+            mostrarAvisoSeleccion();
+            return;
+        }
+
+        JTextField campoNombre = new JTextField();
+        JTextField campoDocumento = new JTextField();
+        JTextField campoCargo = new JTextField();
+        JTextField campoInstitucion = new JTextField();
+        JTextField campoEmail = new JTextField();
+
+        JPanel formulario = new JPanel(
+                new GridLayout(0, 2, 10, 10)
+        );
+
+        formulario.add(new JLabel("Nombre completo:"));
+        formulario.add(campoNombre);
+
+        formulario.add(new JLabel("Documento:"));
+        formulario.add(campoDocumento);
+
+        formulario.add(new JLabel("Cargo:"));
+        formulario.add(campoCargo);
+
+        formulario.add(new JLabel("Institución:"));
+        formulario.add(campoInstitucion);
+
+        formulario.add(new JLabel("Correo electrónico:"));
+        formulario.add(campoEmail);
+
+        int resultado = JOptionPane.showConfirmDialog(
+                this,
+                formulario,
+                "Inscribir asistente en " + evento.getNombre(),
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE
+        );
+
+        if (resultado != JOptionPane.OK_OPTION) {
+            return;
+        }
+
+        try {
+            Asistente asistente = new Asistente(
+                    gestor.obtenerSiguienteIdAsistente(),
+                    campoNombre.getText().trim(),
+                    campoDocumento.getText().trim(),
+                    campoCargo.getText().trim(),
+                    campoInstitucion.getText().trim(),
+                    campoEmail.getText().trim()
+            );
+
+            gestor.inscribirAsistente(
+                    evento.getId(),
+                    asistente
+            );
+
+            persistencia.guardarDatos(gestor);
+            actualizarListaEventos();
+
+            JOptionPane.showMessageDialog(
+                    this,
+                    "El asistente fue registrado correctamente."
+            );
+
+        } catch (IOException e) {
+            mostrarErrorArchivos();
+
+        } catch (RuntimeException e) {
+            mostrarErrorDatos(e);
+        }
+    }
+
+    private void mostrarDetalleEvento() {
+        Evento evento = listaEventos.getSelectedValue();
+
+        if (evento == null) {
+            mostrarAvisoSeleccion();
+            return;
+        }
+
+        JTextArea detalle = new JTextArea();
+        detalle.setEditable(false);
+        detalle.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        detalle.setLineWrap(true);
+        detalle.setWrapStyleWord(true);
+        detalle.setMargin(new Insets(10, 10, 10, 10));
+
+        detalle.append("Nombre: " + evento.getNombre() + "\n\n");
+        detalle.append(
+                "Descripción: " + evento.getDescripcion() + "\n\n"
+        );
+        detalle.append(
+                "Ubicación: " + evento.getUbicacion() + "\n"
+        );
+        detalle.append("Fecha: " + evento.getFecha() + "\n");
+        detalle.append(
+                "Horario: " + evento.getHoraInicio() +
+                        " a " + evento.getHoraFin() + "\n"
+        );
+        detalle.append(
+                "Capacidad: " + evento.getCapacidad() + "\n\n"
+        );
+
+        detalle.append("ASISTENTES\n");
+
+        if (evento.getAsistentes().isEmpty()) {
+            detalle.append("No hay asistentes registrados.\n");
+        } else {
+            for (Asistente asistente : evento.getAsistentes()) {
+                detalle.append(
+                        asistente.getNombreCompleto() +
+                                " - " +
+                                asistente.getCargo() +
+                                " - " +
+                                asistente.getInstitucion() +
+                                "\n"
+                );
+            }
+        }
+
+        detalle.append("\nAGENDA\n");
+
+        if (evento.getAgenda().isEmpty()) {
+            detalle.append("No hay tareas registradas.\n");
+        } else {
+            evento.getAgenda().forEach(
+                    (hora, tarea) ->
+                            detalle.append(
+                                    hora + " - " + tarea + "\n"
+                            )
+            );
+        }
+
+        detalle.append("\nRECURSOS\n");
+
+        if (evento.getRecursosAsignados().isEmpty()) {
+            detalle.append("No hay recursos asignados.\n");
+        } else {
+            evento.getRecursosAsignados().forEach(
+                    (recurso, cantidad) ->
+                            detalle.append(
+                                    recurso.getNombre() +
+                                            ": " +
+                                            cantidad +
+                                            "\n"
+                            )
+            );
+        }
+
+        JScrollPane scroll = new JScrollPane(detalle);
+        scroll.setPreferredSize(new Dimension(520, 400));
+
+        JOptionPane.showMessageDialog(
+                this,
+                scroll,
+                "Detalle del evento",
+                JOptionPane.INFORMATION_MESSAGE
+        );
+    }
+
+    private JPanel crearFormularioEvento(
+            JTextField campoNombre,
+            JTextField campoDescripcion,
+            JTextField campoUbicacion,
+            JTextField campoFecha,
+            JTextField campoHoraInicio,
+            JTextField campoHoraFin,
+            JTextField campoCapacidad
+    ) {
+        JPanel formulario = new JPanel(
+                new GridLayout(0, 2, 10, 10)
+        );
+
+        formulario.add(new JLabel("Nombre:"));
+        formulario.add(campoNombre);
+
+        formulario.add(new JLabel("Descripción:"));
+        formulario.add(campoDescripcion);
+
+        formulario.add(new JLabel("Ubicación:"));
+        formulario.add(campoUbicacion);
+
+        formulario.add(new JLabel("Fecha (AAAA-MM-DD):"));
+        formulario.add(campoFecha);
+
+        formulario.add(new JLabel("Hora de inicio (HH:MM):"));
+        formulario.add(campoHoraInicio);
+
+        formulario.add(new JLabel("Hora de finalización (HH:MM):"));
+        formulario.add(campoHoraFin);
+
+        formulario.add(new JLabel("Capacidad:"));
+        formulario.add(campoCapacidad);
+
+        return formulario;
+    }
+
+    private void eliminarEventoSeleccionado() {
+        Evento eventoSeleccionado =
+                listaEventos.getSelectedValue();
+
+        if (eventoSeleccionado == null) {
+            mostrarAvisoSeleccion();
+            return;
+        }
+
+        int confirmacion = JOptionPane.showConfirmDialog(
+                this,
+                "¿Querés eliminar el evento \"" +
+                        eventoSeleccionado.getNombre() + "\"?",
+                "Confirmar eliminación",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE
+        );
+
+        if (confirmacion != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        try {
+            gestor.eliminarEvento(eventoSeleccionado.getId());
+            persistencia.guardarDatos(gestor);
+            actualizarListaEventos();
+
+            JOptionPane.showMessageDialog(
+                    this,
+                    "El evento fue eliminado correctamente."
+            );
+
+        } catch (IOException e) {
+            mostrarErrorArchivos();
+        }
+    }
+
+    private void mostrarAvisoSeleccion() {
+        JOptionPane.showMessageDialog(
+                this,
+                "Seleccioná un evento de la lista.",
+                "Evento no seleccionado",
+                JOptionPane.WARNING_MESSAGE
+        );
+    }
+
+    private void mostrarErrorArchivos() {
+        JOptionPane.showMessageDialog(
+                this,
+                "No se pudieron actualizar los archivos.",
+                "Error",
+                JOptionPane.ERROR_MESSAGE
+        );
+    }
+
+    private void mostrarErrorDatos(RuntimeException e) {
+        JOptionPane.showMessageDialog(
+                this,
+                "Revisá los datos ingresados.\n" + e.getMessage(),
+                "Datos incorrectos",
+                JOptionPane.WARNING_MESSAGE
+        );
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            InterfazPrincipal ventana =
+                    new InterfazPrincipal();
+
+            ventana.setVisible(true);
+        });
+    }
+}
