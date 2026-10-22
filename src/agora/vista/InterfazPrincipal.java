@@ -2,6 +2,7 @@ package agora.vista;
 
 import agora.modelo.Asistente;
 import agora.modelo.Evento;
+import agora.modelo.Recurso;
 import agora.persistencia.PersistenciaTXT;
 import agora.servicio.GestorEventos;
 
@@ -34,7 +35,7 @@ public class InterfazPrincipal extends JFrame {
     private void configurarVentana() {
         setTitle("ÁGORA Producciones - Gestión de eventos");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(950, 520);
+        setSize(1050, 580);
         setLocationRelativeTo(null);
     }
 
@@ -54,7 +55,11 @@ public class InterfazPrincipal extends JFrame {
         JButton botonEditar = new JButton("Editar evento");
         JButton botonDetalle = new JButton("Ver detalle");
         JButton botonAsistente = new JButton("Inscribir asistente");
+        JButton botonAgregarTarea = new JButton("Agregar tarea");
         JButton botonEliminar = new JButton("Eliminar evento");
+        JButton botonRegistrarRecurso = new JButton("Registrar recurso");
+        JButton botonAsignarRecurso = new JButton("Asignar recurso");
+        JButton botonCalendario = new JButton("Calendario diario");
 
         botonAgregar.addActionListener(
                 e -> mostrarFormularioNuevoEvento()
@@ -72,19 +77,51 @@ public class InterfazPrincipal extends JFrame {
                 e -> inscribirAsistente()
         );
 
+        botonAgregarTarea.addActionListener(
+                e -> agregarTareaEvento()
+        );
+
         botonEliminar.addActionListener(
                 e -> eliminarEventoSeleccionado()
         );
 
-        JPanel panelBotones = new JPanel(
+        botonRegistrarRecurso.addActionListener(
+                e -> registrarRecurso()
+        );
+
+        botonAsignarRecurso.addActionListener(
+                e -> asignarRecursoEvento()
+        );
+
+        botonCalendario.addActionListener(
+                e -> mostrarCalendarioDiario()
+        );
+
+        JPanel panelEventos = new JPanel(
                 new FlowLayout(FlowLayout.RIGHT)
         );
 
-        panelBotones.add(botonAgregar);
-        panelBotones.add(botonEditar);
-        panelBotones.add(botonDetalle);
-        panelBotones.add(botonAsistente);
-        panelBotones.add(botonEliminar);
+        panelEventos.add(botonAgregar);
+        panelEventos.add(botonEditar);
+        panelEventos.add(botonDetalle);
+        panelEventos.add(botonAsistente);
+        panelEventos.add(botonAgregarTarea);
+        panelEventos.add(botonEliminar);
+
+        JPanel panelHerramientas = new JPanel(
+                new FlowLayout(FlowLayout.RIGHT)
+        );
+
+        panelHerramientas.add(botonRegistrarRecurso);
+        panelHerramientas.add(botonAsignarRecurso);
+        panelHerramientas.add(botonCalendario);
+
+        JPanel panelBotones = new JPanel(
+                new GridLayout(2, 1)
+        );
+
+        panelBotones.add(panelEventos);
+        panelBotones.add(panelHerramientas);
 
         panelPrincipal.add(titulo, BorderLayout.NORTH);
         panelPrincipal.add(scrollEventos, BorderLayout.CENTER);
@@ -326,6 +363,288 @@ public class InterfazPrincipal extends JFrame {
 
         } catch (RuntimeException e) {
             mostrarErrorDatos(e);
+        }
+    }
+
+    private void registrarRecurso() {
+        JTextField campoNombre = new JTextField();
+        JTextField campoTipo = new JTextField();
+        JTextField campoCantidad = new JTextField("1");
+
+        JPanel formulario = new JPanel(
+                new GridLayout(0, 2, 10, 10)
+        );
+
+        formulario.add(new JLabel("Nombre:"));
+        formulario.add(campoNombre);
+
+        formulario.add(new JLabel("Tipo:"));
+        formulario.add(campoTipo);
+
+        formulario.add(new JLabel("Cantidad disponible:"));
+        formulario.add(campoCantidad);
+
+        int resultado = JOptionPane.showConfirmDialog(
+                this,
+                formulario,
+                "Registrar recurso",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE
+        );
+
+        if (resultado != JOptionPane.OK_OPTION) {
+            return;
+        }
+
+        try {
+            Recurso recurso = new Recurso(
+                    gestor.obtenerSiguienteIdRecurso(),
+                    campoNombre.getText().trim(),
+                    campoTipo.getText().trim(),
+                    Integer.parseInt(campoCantidad.getText().trim())
+            );
+
+            gestor.registrarRecurso(recurso);
+            persistencia.guardarDatos(gestor);
+
+            JOptionPane.showMessageDialog(
+                    this,
+                    "El recurso fue registrado correctamente."
+            );
+
+        } catch (IOException e) {
+            mostrarErrorArchivos();
+
+        } catch (RuntimeException e) {
+            mostrarErrorDatos(e);
+        }
+    }
+
+    private void asignarRecursoEvento() {
+        Evento evento = listaEventos.getSelectedValue();
+
+        if (evento == null) {
+            mostrarAvisoSeleccion();
+            return;
+        }
+
+        if (gestor.obtenerRecursos().isEmpty()) {
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Primero tenés que registrar un recurso.",
+                    "No hay recursos",
+                    JOptionPane.WARNING_MESSAGE
+            );
+            return;
+        }
+
+        JComboBox<Recurso> comboRecursos = new JComboBox<>(
+                gestor.obtenerRecursos().toArray(new Recurso[0])
+        );
+
+        JTextField campoCantidad = new JTextField("1");
+
+        JPanel formulario = new JPanel(
+                new GridLayout(0, 2, 10, 10)
+        );
+
+        formulario.add(new JLabel("Recurso:"));
+        formulario.add(comboRecursos);
+
+        formulario.add(new JLabel("Cantidad a asignar:"));
+        formulario.add(campoCantidad);
+
+        int resultado = JOptionPane.showConfirmDialog(
+                this,
+                formulario,
+                "Asignar recurso a " + evento.getNombre(),
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE
+        );
+
+        if (resultado != JOptionPane.OK_OPTION) {
+            return;
+        }
+
+        try {
+            Recurso recursoSeleccionado =
+                    (Recurso) comboRecursos.getSelectedItem();
+
+            int cantidad = Integer.parseInt(
+                    campoCantidad.getText().trim()
+            );
+
+            gestor.asignarRecurso(
+                    evento.getId(),
+                    recursoSeleccionado.getId(),
+                    cantidad
+            );
+
+            persistencia.guardarDatos(gestor);
+
+            JOptionPane.showMessageDialog(
+                    this,
+                    "El recurso fue asignado correctamente."
+            );
+
+        } catch (IOException e) {
+            mostrarErrorArchivos();
+
+        } catch (RuntimeException e) {
+            mostrarErrorDatos(e);
+        }
+    }
+
+    private void agregarTareaEvento() {
+        Evento evento = listaEventos.getSelectedValue();
+
+        if (evento == null) {
+            mostrarAvisoSeleccion();
+            return;
+        }
+
+        JTextField campoHora = new JTextField(
+                evento.getHoraInicio().toString()
+        );
+
+        JTextField campoDescripcion = new JTextField();
+
+        JPanel formulario = new JPanel(
+                new GridLayout(0, 2, 10, 10)
+        );
+
+        formulario.add(new JLabel("Hora (HH:MM):"));
+        formulario.add(campoHora);
+
+        formulario.add(new JLabel("Descripción de la tarea:"));
+        formulario.add(campoDescripcion);
+
+        int resultado = JOptionPane.showConfirmDialog(
+                this,
+                formulario,
+                "Agregar tarea a " + evento.getNombre(),
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE
+        );
+
+        if (resultado != JOptionPane.OK_OPTION) {
+            return;
+        }
+
+        try {
+            evento.agregarTarea(
+                    LocalTime.parse(campoHora.getText().trim()),
+                    campoDescripcion.getText().trim()
+            );
+
+            persistencia.guardarDatos(gestor);
+
+            JOptionPane.showMessageDialog(
+                    this,
+                    "La tarea fue agregada correctamente."
+            );
+
+        } catch (IOException e) {
+            mostrarErrorArchivos();
+
+        } catch (RuntimeException e) {
+            mostrarErrorDatos(e);
+        }
+    }
+
+    private void mostrarCalendarioDiario() {
+        String fechaIngresada = JOptionPane.showInputDialog(
+                this,
+                "Ingresá la fecha que querés consultar:",
+                LocalDate.now().toString()
+        );
+
+        if (fechaIngresada == null) {
+            return;
+        }
+
+        try {
+            LocalDate fecha = LocalDate.parse(
+                    fechaIngresada.trim()
+            );
+
+            JTextArea calendario = new JTextArea();
+            calendario.setEditable(false);
+            calendario.setFont(
+                    new Font("SansSerif", Font.PLAIN, 14)
+            );
+            calendario.setMargin(
+                    new Insets(10, 10, 10, 10)
+            );
+
+            calendario.append(
+                    "CALENDARIO DEL DÍA " + fecha + "\n\n"
+            );
+
+            var eventosDelDia =
+                    gestor.obtenerEventosPorFecha(fecha);
+
+            if (eventosDelDia.isEmpty()) {
+                calendario.append(
+                        "No hay eventos programados para esta fecha."
+                );
+            } else {
+                for (Evento evento : eventosDelDia) {
+                    calendario.append(
+                            evento.getHoraInicio() +
+                                    " a " +
+                                    evento.getHoraFin() +
+                                    " | " +
+                                    evento.getNombre() +
+                                    "\n"
+                    );
+
+                    calendario.append(
+                            "Ubicación: " +
+                                    evento.getUbicacion() +
+                                    "\n"
+                    );
+
+                    if (evento.getAgenda().isEmpty()) {
+                        calendario.append(
+                                "Sin tareas registradas.\n"
+                        );
+                    } else {
+                        evento.getAgenda().forEach(
+                                (hora, tarea) ->
+                                        calendario.append(
+                                                "  " +
+                                                        hora +
+                                                        " - " +
+                                                        tarea +
+                                                        "\n"
+                                        )
+                        );
+                    }
+
+                    calendario.append("\n");
+                }
+            }
+
+            JScrollPane scroll = new JScrollPane(calendario);
+            scroll.setPreferredSize(
+                    new Dimension(550, 400)
+            );
+
+            JOptionPane.showMessageDialog(
+                    this,
+                    scroll,
+                    "Calendario diario",
+                    JOptionPane.INFORMATION_MESSAGE
+            );
+
+        } catch (RuntimeException e) {
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Ingresá una fecha válida con el formato AAAA-MM-DD.",
+                    "Fecha incorrecta",
+                    JOptionPane.WARNING_MESSAGE
+            );
         }
     }
 
