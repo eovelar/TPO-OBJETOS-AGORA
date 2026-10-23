@@ -12,6 +12,7 @@ import java.awt.*;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 
 public class InterfazPrincipal extends JFrame {
 
@@ -19,12 +20,17 @@ public class InterfazPrincipal extends JFrame {
     private final PersistenciaTXT persistencia;
     private final DefaultListModel<Evento> modeloEventos;
     private final JList<Evento> listaEventos;
+    private final JComboBox<String> filtroEventos;
 
     public InterfazPrincipal() {
         gestor = new GestorEventos();
         persistencia = new PersistenciaTXT("datos");
         modeloEventos = new DefaultListModel<>();
         listaEventos = new JList<>(modeloEventos);
+
+        filtroEventos = new JComboBox<>(
+                new String[]{"Todos", "Próximos", "Pasados"}
+        );
 
         configurarVentana();
         crearContenido();
@@ -40,26 +46,74 @@ public class InterfazPrincipal extends JFrame {
     }
 
     private void crearContenido() {
-        JPanel panelPrincipal = new JPanel(new BorderLayout(10, 10));
-        panelPrincipal.setBorder(new EmptyBorder(20, 20, 20, 20));
+        JPanel panelPrincipal = new JPanel(
+                new BorderLayout(10, 10)
+        );
+
+        panelPrincipal.setBorder(
+                new EmptyBorder(20, 20, 20, 20)
+        );
 
         JLabel titulo = new JLabel("Eventos programados");
-        titulo.setFont(new Font("SansSerif", Font.BOLD, 24));
+        titulo.setFont(
+                new Font("SansSerif", Font.BOLD, 24)
+        );
 
-        listaEventos.setFont(new Font("SansSerif", Font.PLAIN, 15));
-        listaEventos.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        JPanel panelSuperior = new JPanel(
+                new BorderLayout()
+        );
 
-        JScrollPane scrollEventos = new JScrollPane(listaEventos);
+        JPanel panelFiltro = new JPanel(
+                new FlowLayout(FlowLayout.RIGHT)
+        );
 
-        JButton botonAgregar = new JButton("Agregar evento");
-        JButton botonEditar = new JButton("Editar evento");
-        JButton botonDetalle = new JButton("Ver detalle");
-        JButton botonAsistente = new JButton("Inscribir asistente");
-        JButton botonAgregarTarea = new JButton("Agregar tarea");
-        JButton botonEliminar = new JButton("Eliminar evento");
-        JButton botonRegistrarRecurso = new JButton("Registrar recurso");
-        JButton botonAsignarRecurso = new JButton("Asignar recurso");
-        JButton botonCalendario = new JButton("Calendario diario");
+        panelFiltro.add(new JLabel("Mostrar:"));
+        panelFiltro.add(filtroEventos);
+
+        filtroEventos.addActionListener(
+                e -> actualizarListaEventos()
+        );
+
+        panelSuperior.add(titulo, BorderLayout.WEST);
+        panelSuperior.add(panelFiltro, BorderLayout.EAST);
+
+        listaEventos.setFont(
+                new Font("SansSerif", Font.PLAIN, 15)
+        );
+
+        listaEventos.setSelectionMode(
+                ListSelectionModel.SINGLE_SELECTION
+        );
+
+        JScrollPane scrollEventos =
+                new JScrollPane(listaEventos);
+
+        JButton botonAgregar =
+                new JButton("Agregar evento");
+
+        JButton botonEditar =
+                new JButton("Editar evento");
+
+        JButton botonDetalle =
+                new JButton("Ver detalle");
+
+        JButton botonAsistente =
+                new JButton("Inscribir asistente");
+
+        JButton botonAgregarTarea =
+                new JButton("Agregar tarea");
+
+        JButton botonEliminar =
+                new JButton("Eliminar evento");
+
+        JButton botonRegistrarRecurso =
+                new JButton("Registrar recurso");
+
+        JButton botonAsignarRecurso =
+                new JButton("Asignar recurso");
+
+        JButton botonCalendario =
+                new JButton("Calendario diario");
 
         botonAgregar.addActionListener(
                 e -> mostrarFormularioNuevoEvento()
@@ -123,9 +177,20 @@ public class InterfazPrincipal extends JFrame {
         panelBotones.add(panelEventos);
         panelBotones.add(panelHerramientas);
 
-        panelPrincipal.add(titulo, BorderLayout.NORTH);
-        panelPrincipal.add(scrollEventos, BorderLayout.CENTER);
-        panelPrincipal.add(panelBotones, BorderLayout.SOUTH);
+        panelPrincipal.add(
+                panelSuperior,
+                BorderLayout.NORTH
+        );
+
+        panelPrincipal.add(
+                scrollEventos,
+                BorderLayout.CENTER
+        );
+
+        panelPrincipal.add(
+                panelBotones,
+                BorderLayout.SOUTH
+        );
 
         setContentPane(panelPrincipal);
     }
@@ -147,7 +212,22 @@ public class InterfazPrincipal extends JFrame {
     private void actualizarListaEventos() {
         modeloEventos.clear();
 
-        for (Evento evento : gestor.obtenerEventosOrdenados()) {
+        String filtro =
+                (String) filtroEventos.getSelectedItem();
+
+        List<Evento> eventos;
+
+        if ("Próximos".equals(filtro)) {
+            eventos = gestor.obtenerEventosFuturos();
+
+        } else if ("Pasados".equals(filtro)) {
+            eventos = gestor.obtenerEventosPasados();
+
+        } else {
+            eventos = gestor.obtenerEventosOrdenados();
+        }
+
+        for (Evento evento : eventos) {
             modeloEventos.addElement(evento);
         }
     }
@@ -156,10 +236,14 @@ public class InterfazPrincipal extends JFrame {
         JTextField campoNombre = new JTextField();
         JTextField campoDescripcion = new JTextField();
         JTextField campoUbicacion = new JTextField();
-        JTextField campoFecha = new JTextField("2026-11-11");
-        JTextField campoHoraInicio = new JTextField("11:00");
-        JTextField campoHoraFin = new JTextField("13:00");
-        JTextField campoCapacidad = new JTextField("100");
+        JTextField campoFecha =
+                new JTextField("2026-11-11");
+        JTextField campoHoraInicio =
+                new JTextField("11:00");
+        JTextField campoHoraFin =
+                new JTextField("13:00");
+        JTextField campoCapacidad =
+                new JTextField("100");
 
         JPanel formulario = crearFormularioEvento(
                 campoNombre,
@@ -189,10 +273,18 @@ public class InterfazPrincipal extends JFrame {
                     campoNombre.getText().trim(),
                     campoDescripcion.getText().trim(),
                     campoUbicacion.getText().trim(),
-                    LocalDate.parse(campoFecha.getText().trim()),
-                    LocalTime.parse(campoHoraInicio.getText().trim()),
-                    LocalTime.parse(campoHoraFin.getText().trim()),
-                    Integer.parseInt(campoCapacidad.getText().trim())
+                    LocalDate.parse(
+                            campoFecha.getText().trim()
+                    ),
+                    LocalTime.parse(
+                            campoHoraInicio.getText().trim()
+                    ),
+                    LocalTime.parse(
+                            campoHoraFin.getText().trim()
+                    ),
+                    Integer.parseInt(
+                            campoCapacidad.getText().trim()
+                    )
             );
 
             gestor.registrarEvento(evento);
@@ -230,16 +322,24 @@ public class InterfazPrincipal extends JFrame {
                 new JTextField(evento.getUbicacion());
 
         JTextField campoFecha =
-                new JTextField(evento.getFecha().toString());
+                new JTextField(
+                        evento.getFecha().toString()
+                );
 
         JTextField campoHoraInicio =
-                new JTextField(evento.getHoraInicio().toString());
+                new JTextField(
+                        evento.getHoraInicio().toString()
+                );
 
         JTextField campoHoraFin =
-                new JTextField(evento.getHoraFin().toString());
+                new JTextField(
+                        evento.getHoraFin().toString()
+                );
 
         JTextField campoCapacidad =
-                new JTextField(String.valueOf(evento.getCapacidad()));
+                new JTextField(
+                        String.valueOf(evento.getCapacidad())
+                );
 
         JPanel formulario = crearFormularioEvento(
                 campoNombre,
@@ -268,10 +368,18 @@ public class InterfazPrincipal extends JFrame {
                     campoNombre.getText().trim(),
                     campoDescripcion.getText().trim(),
                     campoUbicacion.getText().trim(),
-                    LocalDate.parse(campoFecha.getText().trim()),
-                    LocalTime.parse(campoHoraInicio.getText().trim()),
-                    LocalTime.parse(campoHoraFin.getText().trim()),
-                    Integer.parseInt(campoCapacidad.getText().trim())
+                    LocalDate.parse(
+                            campoFecha.getText().trim()
+                    ),
+                    LocalTime.parse(
+                            campoHoraInicio.getText().trim()
+                    ),
+                    LocalTime.parse(
+                            campoHoraFin.getText().trim()
+                    ),
+                    Integer.parseInt(
+                            campoCapacidad.getText().trim()
+                    )
             );
 
             persistencia.guardarDatos(gestor);
@@ -326,7 +434,8 @@ public class InterfazPrincipal extends JFrame {
         int resultado = JOptionPane.showConfirmDialog(
                 this,
                 formulario,
-                "Inscribir asistente en " + evento.getNombre(),
+                "Inscribir asistente en " +
+                        evento.getNombre(),
                 JOptionPane.OK_CANCEL_OPTION,
                 JOptionPane.PLAIN_MESSAGE
         );
@@ -401,7 +510,9 @@ public class InterfazPrincipal extends JFrame {
                     gestor.obtenerSiguienteIdRecurso(),
                     campoNombre.getText().trim(),
                     campoTipo.getText().trim(),
-                    Integer.parseInt(campoCantidad.getText().trim())
+                    Integer.parseInt(
+                            campoCantidad.getText().trim()
+                    )
             );
 
             gestor.registrarRecurso(recurso);
@@ -438,9 +549,11 @@ public class InterfazPrincipal extends JFrame {
             return;
         }
 
-        JComboBox<Recurso> comboRecursos = new JComboBox<>(
-                gestor.obtenerRecursos().toArray(new Recurso[0])
-        );
+        JComboBox<Recurso> comboRecursos =
+                new JComboBox<>(
+                        gestor.obtenerRecursos()
+                                .toArray(new Recurso[0])
+                );
 
         JTextField campoCantidad = new JTextField("1");
 
@@ -468,7 +581,12 @@ public class InterfazPrincipal extends JFrame {
 
         try {
             Recurso recursoSeleccionado =
-                    (Recurso) comboRecursos.getSelectedItem();
+                    (Recurso) comboRecursos
+                            .getSelectedItem();
+
+            if (recursoSeleccionado == null) {
+                return;
+            }
 
             int cantidad = Integer.parseInt(
                     campoCantidad.getText().trim()
@@ -507,7 +625,8 @@ public class InterfazPrincipal extends JFrame {
                 evento.getHoraInicio().toString()
         );
 
-        JTextField campoDescripcion = new JTextField();
+        JTextField campoDescripcion =
+                new JTextField();
 
         JPanel formulario = new JPanel(
                 new GridLayout(0, 2, 10, 10)
@@ -516,7 +635,9 @@ public class InterfazPrincipal extends JFrame {
         formulario.add(new JLabel("Hora (HH:MM):"));
         formulario.add(campoHora);
 
-        formulario.add(new JLabel("Descripción de la tarea:"));
+        formulario.add(
+                new JLabel("Descripción de la tarea:")
+        );
         formulario.add(campoDescripcion);
 
         int resultado = JOptionPane.showConfirmDialog(
@@ -533,7 +654,9 @@ public class InterfazPrincipal extends JFrame {
 
         try {
             evento.agregarTarea(
-                    LocalTime.parse(campoHora.getText().trim()),
+                    LocalTime.parse(
+                            campoHora.getText().trim()
+                    ),
                     campoDescripcion.getText().trim()
             );
 
@@ -553,11 +676,12 @@ public class InterfazPrincipal extends JFrame {
     }
 
     private void mostrarCalendarioDiario() {
-        String fechaIngresada = JOptionPane.showInputDialog(
-                this,
-                "Ingresá la fecha que querés consultar:",
-                LocalDate.now().toString()
-        );
+        String fechaIngresada =
+                JOptionPane.showInputDialog(
+                        this,
+                        "Ingresá la fecha que querés consultar:",
+                        LocalDate.now().toString()
+                );
 
         if (fechaIngresada == null) {
             return;
@@ -571,23 +695,31 @@ public class InterfazPrincipal extends JFrame {
             JTextArea calendario = new JTextArea();
             calendario.setEditable(false);
             calendario.setFont(
-                    new Font("SansSerif", Font.PLAIN, 14)
+                    new Font(
+                            "SansSerif",
+                            Font.PLAIN,
+                            14
+                    )
             );
+
             calendario.setMargin(
                     new Insets(10, 10, 10, 10)
             );
 
             calendario.append(
-                    "CALENDARIO DEL DÍA " + fecha + "\n\n"
+                    "CALENDARIO DEL DÍA " +
+                            fecha +
+                            "\n\n"
             );
 
-            var eventosDelDia =
+            List<Evento> eventosDelDia =
                     gestor.obtenerEventosPorFecha(fecha);
 
             if (eventosDelDia.isEmpty()) {
                 calendario.append(
                         "No hay eventos programados para esta fecha."
                 );
+
             } else {
                 for (Evento evento : eventosDelDia) {
                     calendario.append(
@@ -609,6 +741,7 @@ public class InterfazPrincipal extends JFrame {
                         calendario.append(
                                 "Sin tareas registradas.\n"
                         );
+
                     } else {
                         evento.getAgenda().forEach(
                                 (hora, tarea) ->
@@ -626,7 +759,9 @@ public class InterfazPrincipal extends JFrame {
                 }
             }
 
-            JScrollPane scroll = new JScrollPane(calendario);
+            JScrollPane scroll =
+                    new JScrollPane(calendario);
+
             scroll.setPreferredSize(
                     new Dimension(550, 400)
             );
@@ -658,33 +793,64 @@ public class InterfazPrincipal extends JFrame {
 
         JTextArea detalle = new JTextArea();
         detalle.setEditable(false);
-        detalle.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        detalle.setFont(
+                new Font("SansSerif", Font.PLAIN, 14)
+        );
         detalle.setLineWrap(true);
         detalle.setWrapStyleWord(true);
-        detalle.setMargin(new Insets(10, 10, 10, 10));
+        detalle.setMargin(
+                new Insets(10, 10, 10, 10)
+        );
 
-        detalle.append("Nombre: " + evento.getNombre() + "\n\n");
         detalle.append(
-                "Descripción: " + evento.getDescripcion() + "\n\n"
+                "Nombre: " +
+                        evento.getNombre() +
+                        "\n\n"
         );
+
         detalle.append(
-                "Ubicación: " + evento.getUbicacion() + "\n"
+                "Descripción: " +
+                        evento.getDescripcion() +
+                        "\n\n"
         );
-        detalle.append("Fecha: " + evento.getFecha() + "\n");
+
         detalle.append(
-                "Horario: " + evento.getHoraInicio() +
-                        " a " + evento.getHoraFin() + "\n"
+                "Ubicación: " +
+                        evento.getUbicacion() +
+                        "\n"
         );
+
         detalle.append(
-                "Capacidad: " + evento.getCapacidad() + "\n\n"
+                "Fecha: " +
+                        evento.getFecha() +
+                        "\n"
+        );
+
+        detalle.append(
+                "Horario: " +
+                        evento.getHoraInicio() +
+                        " a " +
+                        evento.getHoraFin() +
+                        "\n"
+        );
+
+        detalle.append(
+                "Capacidad: " +
+                        evento.getCapacidad() +
+                        "\n\n"
         );
 
         detalle.append("ASISTENTES\n");
 
         if (evento.getAsistentes().isEmpty()) {
-            detalle.append("No hay asistentes registrados.\n");
+            detalle.append(
+                    "No hay asistentes registrados.\n"
+            );
+
         } else {
-            for (Asistente asistente : evento.getAsistentes()) {
+            for (Asistente asistente :
+                    evento.getAsistentes()) {
+
                 detalle.append(
                         asistente.getNombreCompleto() +
                                 " - " +
@@ -699,12 +865,18 @@ public class InterfazPrincipal extends JFrame {
         detalle.append("\nAGENDA\n");
 
         if (evento.getAgenda().isEmpty()) {
-            detalle.append("No hay tareas registradas.\n");
+            detalle.append(
+                    "No hay tareas registradas.\n"
+            );
+
         } else {
             evento.getAgenda().forEach(
                     (hora, tarea) ->
                             detalle.append(
-                                    hora + " - " + tarea + "\n"
+                                    hora +
+                                            " - " +
+                                            tarea +
+                                            "\n"
                             )
             );
         }
@@ -712,7 +884,10 @@ public class InterfazPrincipal extends JFrame {
         detalle.append("\nRECURSOS\n");
 
         if (evento.getRecursosAsignados().isEmpty()) {
-            detalle.append("No hay recursos asignados.\n");
+            detalle.append(
+                    "No hay recursos asignados.\n"
+            );
+
         } else {
             evento.getRecursosAsignados().forEach(
                     (recurso, cantidad) ->
@@ -725,8 +900,12 @@ public class InterfazPrincipal extends JFrame {
             );
         }
 
-        JScrollPane scroll = new JScrollPane(detalle);
-        scroll.setPreferredSize(new Dimension(520, 400));
+        JScrollPane scroll =
+                new JScrollPane(detalle);
+
+        scroll.setPreferredSize(
+                new Dimension(520, 400)
+        );
 
         JOptionPane.showMessageDialog(
                 this,
@@ -758,13 +937,19 @@ public class InterfazPrincipal extends JFrame {
         formulario.add(new JLabel("Ubicación:"));
         formulario.add(campoUbicacion);
 
-        formulario.add(new JLabel("Fecha (AAAA-MM-DD):"));
+        formulario.add(
+                new JLabel("Fecha (AAAA-MM-DD):")
+        );
         formulario.add(campoFecha);
 
-        formulario.add(new JLabel("Hora de inicio (HH:MM):"));
+        formulario.add(
+                new JLabel("Hora de inicio (HH:MM):")
+        );
         formulario.add(campoHoraInicio);
 
-        formulario.add(new JLabel("Hora de finalización (HH:MM):"));
+        formulario.add(
+                new JLabel("Hora de finalización (HH:MM):")
+        );
         formulario.add(campoHoraFin);
 
         formulario.add(new JLabel("Capacidad:"));
@@ -782,21 +967,26 @@ public class InterfazPrincipal extends JFrame {
             return;
         }
 
-        int confirmacion = JOptionPane.showConfirmDialog(
-                this,
-                "¿Querés eliminar el evento \"" +
-                        eventoSeleccionado.getNombre() + "\"?",
-                "Confirmar eliminación",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.WARNING_MESSAGE
-        );
+        int confirmacion =
+                JOptionPane.showConfirmDialog(
+                        this,
+                        "¿Querés eliminar el evento \"" +
+                                eventoSeleccionado.getNombre() +
+                                "\"?",
+                        "Confirmar eliminación",
+                        JOptionPane.YES_NO_OPTION,
+                        JOptionPane.WARNING_MESSAGE
+                );
 
         if (confirmacion != JOptionPane.YES_OPTION) {
             return;
         }
 
         try {
-            gestor.eliminarEvento(eventoSeleccionado.getId());
+            gestor.eliminarEvento(
+                    eventoSeleccionado.getId()
+            );
+
             persistencia.guardarDatos(gestor);
             actualizarListaEventos();
 
@@ -828,10 +1018,13 @@ public class InterfazPrincipal extends JFrame {
         );
     }
 
-    private void mostrarErrorDatos(RuntimeException e) {
+    private void mostrarErrorDatos(
+            RuntimeException e
+    ) {
         JOptionPane.showMessageDialog(
                 this,
-                "Revisá los datos ingresados.\n" + e.getMessage(),
+                "Revisá los datos ingresados.\n" +
+                        e.getMessage(),
                 "Datos incorrectos",
                 JOptionPane.WARNING_MESSAGE
         );
