@@ -73,7 +73,10 @@ public class GestorEventos {
         return eventos.remove(evento);
     }
 
-    public boolean inscribirAsistente(int idEvento, Asistente asistente) {
+    public boolean inscribirAsistente(
+            int idEvento,
+            Asistente asistente
+    ) {
         Evento evento = buscarEventoPorId(idEvento);
 
         if (evento == null) {
@@ -83,7 +86,11 @@ public class GestorEventos {
         return evento.inscribirAsistente(asistente);
     }
 
-    public boolean asignarRecurso(int idEvento, int idRecurso, int cantidad) {
+    public boolean asignarRecurso(
+            int idEvento,
+            int idRecurso,
+            int cantidad
+    ) {
         Evento evento = buscarEventoPorId(idEvento);
         Recurso recurso = buscarRecursoPorId(idRecurso);
 
@@ -91,8 +98,11 @@ public class GestorEventos {
             return false;
         }
 
-        int cantidadComprometida = calcularCantidadComprometida(recurso, evento);
-        int cantidadDisponible = recurso.getCantidadTotal() - cantidadComprometida;
+        int cantidadComprometida =
+                calcularCantidadComprometida(recurso, evento);
+
+        int cantidadDisponible =
+                recurso.getCantidadTotal() - cantidadComprometida;
 
         if (cantidad > cantidadDisponible) {
             return false;
@@ -102,7 +112,10 @@ public class GestorEventos {
         return true;
     }
 
-    private int calcularCantidadComprometida(Recurso recurso, Evento eventoActual) {
+    private int calcularCantidadComprometida(
+            Recurso recurso,
+            Evento eventoActual
+    ) {
         int cantidadComprometida = 0;
 
         for (Evento otroEvento : eventos) {
@@ -138,9 +151,34 @@ public class GestorEventos {
                 .toList();
     }
 
-    public List<Evento> obtenerEventosPorFecha(LocalDate fecha) {
+    public List<Evento> obtenerEventosProximos(int dias) {
+        if (dias < 0) {
+            throw new IllegalArgumentException(
+                    "La cantidad de días no puede ser negativa"
+            );
+        }
+
+        LocalDate fechaLimite =
+                LocalDate.now().plusDays(dias);
+
         return obtenerEventosOrdenados().stream()
-                .filter(evento -> evento.getFecha().equals(fecha))
+                .filter(evento -> !evento.esPasado())
+                .filter(
+                        evento ->
+                                !evento.getFecha()
+                                        .isAfter(fechaLimite)
+                )
+                .toList();
+    }
+
+    public List<Evento> obtenerEventosPorFecha(
+            LocalDate fecha
+    ) {
+        return obtenerEventosOrdenados().stream()
+                .filter(
+                        evento ->
+                                evento.getFecha().equals(fecha)
+                )
                 .toList();
     }
 
@@ -164,7 +202,10 @@ public class GestorEventos {
 
     public int obtenerSiguienteIdAsistente() {
         return eventos.stream()
-                .flatMap(evento -> evento.getAsistentes().stream())
+                .flatMap(
+                        evento ->
+                                evento.getAsistentes().stream()
+                )
                 .mapToInt(Asistente::getId)
                 .max()
                 .orElse(0) + 1;
