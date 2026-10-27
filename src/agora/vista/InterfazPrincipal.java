@@ -454,10 +454,21 @@ public class InterfazPrincipal extends JFrame {
                     campoEmail.getText().trim()
             );
 
-            gestor.inscribirAsistente(
+            boolean registrado = gestor.inscribirAsistente(
                     evento.getId(),
                     asistente
             );
+
+            if (!registrado) {
+                JOptionPane.showMessageDialog(
+                        this,
+                        "No se pudo inscribir al asistente. " +
+                                "El evento alcanzó su capacidad máxima.",
+                        "Sin cupo disponible",
+                        JOptionPane.WARNING_MESSAGE
+                );
+                return;
+            }
 
             persistencia.guardarDatos(gestor);
             actualizarListaEventos();
@@ -592,11 +603,22 @@ public class InterfazPrincipal extends JFrame {
                     campoCantidad.getText().trim()
             );
 
-            gestor.asignarRecurso(
+            boolean asignado = gestor.asignarRecurso(
                     evento.getId(),
                     recursoSeleccionado.getId(),
                     cantidad
             );
+
+            if (!asignado) {
+                JOptionPane.showMessageDialog(
+                        this,
+                        "No hay suficiente cantidad disponible del recurso " +
+                                "para ese horario.",
+                        "Recurso no disponible",
+                        JOptionPane.WARNING_MESSAGE
+                );
+                return;
+            }
 
             persistencia.guardarDatos(gestor);
 
