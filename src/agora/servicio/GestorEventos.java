@@ -3,7 +3,9 @@ package agora.servicio;
 import agora.modelo.Asistente;
 import agora.modelo.Evento;
 import agora.modelo.Recurso;
+import agora.persistencia.PersistenciaTXT;
 
+import java.io.IOException;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -13,19 +15,39 @@ public class GestorEventos {
 
     private final List<Evento> eventos;
     private final List<Recurso> recursos;
+    private final PersistenciaTXT persistencia;
 
     public GestorEventos() {
         eventos = new ArrayList<>();
         recursos = new ArrayList<>();
+        persistencia = new PersistenciaTXT("datos");
+    }
+
+    public void cargarDatos() throws IOException {
+        if (!eventos.isEmpty() || !recursos.isEmpty()) {
+            throw new IllegalStateException(
+                    "Los datos deben cargarse antes de registrar información"
+            );
+        }
+
+        persistencia.cargarDatos(this);
+    }
+
+    public void guardarDatos() throws IOException {
+        persistencia.guardarDatos(this);
     }
 
     public void registrarEvento(Evento evento) {
         if (evento == null) {
-            throw new IllegalArgumentException("El evento es obligatorio");
+            throw new IllegalArgumentException(
+                    "El evento es obligatorio"
+            );
         }
 
         if (buscarEventoPorId(evento.getId()) != null) {
-            throw new IllegalArgumentException("Ya existe un evento con ese id");
+            throw new IllegalArgumentException(
+                    "Ya existe un evento con ese id"
+            );
         }
 
         eventos.add(evento);
@@ -33,11 +55,15 @@ public class GestorEventos {
 
     public void registrarRecurso(Recurso recurso) {
         if (recurso == null) {
-            throw new IllegalArgumentException("El recurso es obligatorio");
+            throw new IllegalArgumentException(
+                    "El recurso es obligatorio"
+            );
         }
 
         if (buscarRecursoPorId(recurso.getId()) != null) {
-            throw new IllegalArgumentException("Ya existe un recurso con ese id");
+            throw new IllegalArgumentException(
+                    "Ya existe un recurso con ese id"
+            );
         }
 
         recursos.add(recurso);
@@ -165,8 +191,7 @@ public class GestorEventos {
                 .filter(evento -> !evento.esPasado())
                 .filter(
                         evento ->
-                                !evento.getFecha()
-                                        .isAfter(fechaLimite)
+                                !evento.getFecha().isAfter(fechaLimite)
                 )
                 .toList();
     }
