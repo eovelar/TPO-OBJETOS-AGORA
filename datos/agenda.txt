@@ -1,3 +1,24 @@
-1;11:00;Llegada de autoridades
-1;13:00;Recorrido por la institución
-1;14:00;Celebración de la misa
+1;10:00;Presentación general del proyecto
+1;10:30;Revisión del cronograma
+1;11:30;Distribución de responsabilidades
+2;10:00;Revisión de sedes y horarios
+2;10:45;Control de recursos disponibles
+2;11:30;Asignación de responsables
+3;11:30;Inicio de la celebración
+3;11:45;Desarrollo de la ceremonia
+3;13:00;Salida organizada del público
+4;16:10;Recepción de invitados
+4;16:30;Inicio del encuentro
+4;17:15;Cierre y salida de asistentes
+5;10:00;Inicio de la celebración
+5;10:15;Desarrollo de la ceremonia
+5;11:45;Desconcentración del público
+6;20:15;Recepción de delegaciones juveniles
+6;20:45;Inicio del encuentro
+6;21:45;Cierre de la actividad
+7;08:00;Ingreso al complejo
+7;08:20;Encuentro con autoridades y asistentes
+7;08:50;Finalización de la visita
+8;10:00;Inicio de la celebración
+8;10:20;Desarrollo de la ceremonia
+8;12:00;Salida organizada de los asistentes

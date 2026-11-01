@@ -1,3 +1,8 @@
-1;Personal de seguridad;Seguridad;50
-2;test;tipo;1
-3;test;test;10
+1;Equipo de sonido profesional;Equipamiento audiovisual;4
+2;Vallas de seguridad;Seguridad y control de accesos;500
+3;Generador eléctrico;Energía y soporte técnico;6
+4;Pantalla LED;Equipamiento audiovisual;4
+5;Micrófono inalámbrico;Equipamiento audiovisual;20
+6;Sillas;Mobiliario;1000
+7;Puesto de primeros auxilios;Asistencia sanitaria;12
+8;Credencial de prensa;Comunicación y prensa;150
