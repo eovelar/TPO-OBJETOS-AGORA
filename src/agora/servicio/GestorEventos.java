@@ -7,9 +7,12 @@ import agora.persistencia.PersistenciaTXT;
 
 import java.io.IOException;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 public class GestorEventos {
 
@@ -23,10 +26,11 @@ public class GestorEventos {
         persistencia = new PersistenciaTXT("datos");
     }
 
+    // la carga se realiza antes de empezar a registrar información
     public void cargarDatos() throws IOException {
         if (!eventos.isEmpty() || !recursos.isEmpty()) {
             throw new IllegalStateException(
-                    "Los datos deben cargarse antes de registrar información"
+                    "Los datos deben cargarse antes de registrar información."
             );
         }
 
@@ -40,13 +44,13 @@ public class GestorEventos {
     public void registrarEvento(Evento evento) {
         if (evento == null) {
             throw new IllegalArgumentException(
-                    "El evento es obligatorio"
+                    "El evento es obligatorio."
             );
         }
 
         if (buscarEventoPorId(evento.getId()) != null) {
             throw new IllegalArgumentException(
-                    "Ya existe un evento con ese id"
+                    "Ya existe un evento con ese id."
             );
         }
 
@@ -56,13 +60,13 @@ public class GestorEventos {
     public void registrarRecurso(Recurso recurso) {
         if (recurso == null) {
             throw new IllegalArgumentException(
-                    "El recurso es obligatorio"
+                    "El recurso es obligatorio."
             );
         }
 
         if (buscarRecursoPorId(recurso.getId()) != null) {
             throw new IllegalArgumentException(
-                    "Ya existe un recurso con ese id"
+                    "Ya existe un recurso con ese id."
             );
         }
 
@@ -89,6 +93,95 @@ public class GestorEventos {
         return null;
     }
 
+    // revisa los recursos antes de modificar el evento original
+    public void actualizarEvento(
+            int id,
+            String nombre,
+            String descripcion,
+            String ubicacion,
+            LocalDate fecha,
+            LocalTime horaInicio,
+            LocalTime horaFin,
+            int capacidad
+    ) {
+        Evento evento = buscarEventoPorId(id);
+
+        if (evento == null) {
+            throw new IllegalArgumentException(
+                    "No se encontró el evento que querés modificar."
+            );
+        }
+
+        // permite validar la propuesta sin tocar los datos guardados
+        Evento propuesta = new Evento(
+                id,
+                nombre,
+                descripcion,
+                ubicacion,
+                fecha,
+                horaInicio,
+                horaFin,
+                capacidad
+        );
+
+        if (capacidad < evento.getAsistentes().size()) {
+            throw new IllegalArgumentException(
+                    "La capacidad no puede ser menor "
+                            + "a la cantidad de asistentes registrados."
+            );
+        }
+
+        // también comprueba que las tareas entren en el nuevo horario
+        for (Map.Entry<LocalTime, String> tarea
+                : evento.getAgenda().entrySet()) {
+
+            propuesta.agregarTarea(
+                    tarea.getKey(),
+                    tarea.getValue()
+            );
+        }
+
+        for (Map.Entry<Recurso, Integer> asignacion
+                : evento.getRecursosAsignados().entrySet()) {
+
+            Recurso recurso = asignacion.getKey();
+            int cantidadAsignada = asignacion.getValue();
+
+            int comprometida = calcularCantidadComprometida(
+                    recurso,
+                    propuesta
+            );
+
+            int disponible =
+                    recurso.getCantidadTotal() - comprometida;
+
+            if (cantidadAsignada > disponible) {
+                throw new IllegalArgumentException(
+                        "No se puede cambiar la fecha o el horario.\n"
+                                + "El recurso \""
+                                + recurso.getNombre()
+                                + "\" está comprometido en otro evento.\n"
+                                + "Cantidad necesaria: "
+                                + cantidadAsignada
+                                + ". Disponible en ese horario: "
+                                + Math.max(0, disponible)
+                                + "."
+                );
+            }
+        }
+
+        // solo modifica el evento cuando todas las comprobaciones pasan
+        evento.actualizarDatos(
+                nombre,
+                descripcion,
+                ubicacion,
+                fecha,
+                horaInicio,
+                horaFin,
+                capacidad
+        );
+    }
+
     public boolean eliminarEvento(int id) {
         Evento evento = buscarEventoPorId(id);
 
@@ -109,6 +202,7 @@ public class GestorEventos {
             return false;
         }
 
+        // el evento controla los documentos duplicados y el cupo
         return evento.inscribirAsistente(asistente);
     }
 
@@ -134,26 +228,65 @@ public class GestorEventos {
             return false;
         }
 
+        // reemplaza la cantidad anterior si el recurso ya estaba asignado
         evento.asignarRecurso(recurso, cantidad);
         return true;
     }
 
+    // calcula el máximo uso simultáneo dentro del horario consultado
     private int calcularCantidadComprometida(
             Recurso recurso,
             Evento eventoActual
     ) {
-        int cantidadComprometida = 0;
+        Map<LocalTime, Long> movimientos = new TreeMap<>();
 
         for (Evento otroEvento : eventos) {
-            if (!otroEvento.equals(eventoActual)
-                    && otroEvento.seSuperponeCon(eventoActual)) {
-
-                cantidadComprometida +=
-                        otroEvento.obtenerCantidadAsignada(recurso);
+            // excluye el mismo evento, incluso al revisar una propuesta
+            if (otroEvento.getId() == eventoActual.getId()
+                    || !otroEvento.seSuperponeCon(eventoActual)) {
+                continue;
             }
+
+            int cantidad =
+                    otroEvento.obtenerCantidadAsignada(recurso);
+
+            if (cantidad == 0) {
+                continue;
+            }
+
+            LocalTime inicio = otroEvento.getHoraInicio()
+                    .isAfter(eventoActual.getHoraInicio())
+                    ? otroEvento.getHoraInicio()
+                    : eventoActual.getHoraInicio();
+
+            LocalTime fin = otroEvento.getHoraFin()
+                    .isBefore(eventoActual.getHoraFin())
+                    ? otroEvento.getHoraFin()
+                    : eventoActual.getHoraFin();
+
+            movimientos.merge(
+                    inicio,
+                    (long) cantidad,
+                    Long::sum
+            );
+
+            movimientos.merge(
+                    fin,
+                    -(long) cantidad,
+                    Long::sum
+            );
         }
 
-        return cantidadComprometida;
+        long cantidadEnUso = 0;
+        long maximoEnUso = 0;
+
+        // las entradas y salidas a la misma hora se compensan
+        for (long cambio : movimientos.values()) {
+            cantidadEnUso += cambio;
+            maximoEnUso = Math.max(maximoEnUso, cantidadEnUso);
+        }
+
+        return (int) Math.min(Integer.MAX_VALUE, maximoEnUso);
     }
 
     public List<Evento> obtenerEventosOrdenados() {
@@ -177,15 +310,15 @@ public class GestorEventos {
                 .toList();
     }
 
+    // incluye los eventos de hoy que todavía no terminaron
     public List<Evento> obtenerEventosProximos(int dias) {
         if (dias < 0) {
             throw new IllegalArgumentException(
-                    "La cantidad de días no puede ser negativa"
+                    "La cantidad de días no puede ser negativa."
             );
         }
 
-        LocalDate fechaLimite =
-                LocalDate.now().plusDays(dias);
+        LocalDate fechaLimite = LocalDate.now().plusDays(dias);
 
         return obtenerEventosOrdenados().stream()
                 .filter(evento -> !evento.esPasado())
@@ -196,17 +329,19 @@ public class GestorEventos {
                 .toList();
     }
 
-    public List<Evento> obtenerEventosPorFecha(
-            LocalDate fecha
-    ) {
+    public List<Evento> obtenerEventosPorFecha(LocalDate fecha) {
+        if (fecha == null) {
+            throw new IllegalArgumentException(
+                    "La fecha de consulta es obligatoria."
+            );
+        }
+
         return obtenerEventosOrdenados().stream()
-                .filter(
-                        evento ->
-                                evento.getFecha().equals(fecha)
-                )
+                .filter(evento -> evento.getFecha().equals(fecha))
                 .toList();
     }
 
+    // devuelve una copia para no modificar la colección desde afuera
     public List<Recurso> obtenerRecursos() {
         return List.copyOf(recursos);
     }
@@ -227,10 +362,7 @@ public class GestorEventos {
 
     public int obtenerSiguienteIdAsistente() {
         return eventos.stream()
-                .flatMap(
-                        evento ->
-                                evento.getAsistentes().stream()
-                )
+                .flatMap(evento -> evento.getAsistentes().stream())
                 .mapToInt(Asistente::getId)
                 .max()
                 .orElse(0) + 1;
