@@ -7,6 +7,8 @@ import agora.servicio.GestorEventos;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
@@ -99,6 +101,7 @@ public class InterfazPrincipal extends JFrame {
         );
 
         tablaEventos = new JTable(modeloEventos);
+
         filtroEventos = new JComboBox<>(
                 new String[]{"Todos", "Próximos", "Pasados"}
         );
@@ -187,6 +190,7 @@ public class InterfazPrincipal extends JFrame {
         JLabel ayuda = new JLabel(
                 "Seleccioná un evento para ver sus asistentes, recursos y agenda"
         );
+
         ayuda.setForeground(GRIS);
         ayuda.setFont(new Font("SansSerif", Font.PLAIN, 12));
 
@@ -201,6 +205,7 @@ public class InterfazPrincipal extends JFrame {
     private JPanel crearEncabezado() {
         JPanel encabezado = new JPanel(new BorderLayout(20, 0));
         encabezado.setBackground(AZUL);
+
         encabezado.setBorder(
                 BorderFactory.createCompoundBorder(
                         BorderFactory.createMatteBorder(
@@ -217,11 +222,13 @@ public class InterfazPrincipal extends JFrame {
         JLabel sistema = new JLabel(
                 "PRODUCCIONES  ·  GESTIÓN DE EVENTOS"
         );
+
         sistema.setFont(new Font("SansSerif", Font.PLAIN, 11));
         sistema.setForeground(new Color(216, 227, 234));
 
         encabezado.add(marca, BorderLayout.WEST);
         encabezado.add(sistema, BorderLayout.EAST);
+
         return encabezado;
     }
 
@@ -236,11 +243,13 @@ public class InterfazPrincipal extends JFrame {
         JPanel herramientas = new JPanel(
                 new FlowLayout(FlowLayout.RIGHT, 7, 0)
         );
+
         herramientas.setOpaque(false);
 
         JButton calendario = crearBoton(
                 "Calendario", Color.WHITE, AZUL
         );
+
         calendario.addActionListener(
                 e -> mostrarCalendarioMensual()
         );
@@ -248,6 +257,7 @@ public class InterfazPrincipal extends JFrame {
         JButton recursos = crearBoton(
                 "Registrar recurso", Color.WHITE, AZUL
         );
+
         recursos.addActionListener(
                 e -> registrarRecurso()
         );
@@ -255,6 +265,7 @@ public class InterfazPrincipal extends JFrame {
         JButton nuevo = crearBoton(
                 "+ Nuevo evento", DORADO, AZUL
         );
+
         nuevo.addActionListener(
                 e -> mostrarFormularioEvento(null)
         );
@@ -265,6 +276,7 @@ public class InterfazPrincipal extends JFrame {
 
         barra.add(titulo, BorderLayout.CENTER);
         barra.add(herramientas, BorderLayout.EAST);
+
         return barra;
     }
 
@@ -279,18 +291,18 @@ public class InterfazPrincipal extends JFrame {
         JPanel filtro = new JPanel(
                 new FlowLayout(FlowLayout.LEFT, 6, 0)
         );
+
         filtro.setOpaque(false);
         filtro.add(new JLabel("Mostrar:"));
 
         filtroEventos.setPreferredSize(new Dimension(130, 29));
-        filtroEventos.addActionListener(
-                e -> actualizarEventos()
-        );
+        filtroEventos.addActionListener(e -> actualizarEventos());
         filtro.add(filtroEventos);
 
         JPanel busqueda = new JPanel(
                 new FlowLayout(FlowLayout.RIGHT, 6, 0)
         );
+
         busqueda.setOpaque(false);
 
         campoBusqueda.setPreferredSize(new Dimension(210, 29));
@@ -301,6 +313,7 @@ public class InterfazPrincipal extends JFrame {
         JButton buscar = crearBoton(
                 "Buscar", Color.WHITE, AZUL
         );
+
         JButton limpiar = crearBoton(
                 "Limpiar", Color.WHITE, AZUL
         );
@@ -308,9 +321,28 @@ public class InterfazPrincipal extends JFrame {
         buscar.addActionListener(e -> actualizarEventos());
         campoBusqueda.addActionListener(e -> actualizarEventos());
 
+        // filtra también al escribir, pegar o borrar texto
+        campoBusqueda.getDocument().addDocumentListener(
+                new DocumentListener() {
+                    @Override
+                    public void insertUpdate(DocumentEvent e) {
+                        actualizarEventos();
+                    }
+
+                    @Override
+                    public void removeUpdate(DocumentEvent e) {
+                        actualizarEventos();
+                    }
+
+                    @Override
+                    public void changedUpdate(DocumentEvent e) {
+                        actualizarEventos();
+                    }
+                }
+        );
+
         limpiar.addActionListener(e -> {
             campoBusqueda.setText("");
-            actualizarEventos();
             campoBusqueda.requestFocusInWindow();
         });
 
@@ -325,18 +357,23 @@ public class InterfazPrincipal extends JFrame {
         JPanel acciones = new JPanel(
                 new FlowLayout(FlowLayout.LEFT, 6, 0)
         );
+
         acciones.setOpaque(false);
 
         botonEditar = crearBoton("Editar", Color.WHITE, AZUL);
+
         botonAsistente = crearBoton(
                 "Inscribir asistente", Color.WHITE, AZUL
         );
+
         botonAsignar = crearBoton(
                 "Asignar recurso", Color.WHITE, AZUL
         );
+
         botonTarea = crearBoton(
                 "Agregar tarea", Color.WHITE, AZUL
         );
+
         botonEliminar = crearBoton(
                 "Eliminar", Color.WHITE, ROJO
         );
@@ -363,6 +400,7 @@ public class InterfazPrincipal extends JFrame {
         panel.add(filtros, BorderLayout.NORTH);
         panel.add(crearScroll(tablaEventos), BorderLayout.CENTER);
         panel.add(acciones, BorderLayout.SOUTH);
+
         return panel;
     }
 
@@ -384,11 +422,13 @@ public class InterfazPrincipal extends JFrame {
 
         asistentes.getColumnModel().getColumn(0)
                 .setPreferredWidth(170);
+
         asistentes.getColumnModel().getColumn(4)
                 .setPreferredWidth(200);
 
         agenda.getColumnModel().getColumn(0)
                 .setPreferredWidth(70);
+
         agenda.getColumnModel().getColumn(1)
                 .setPreferredWidth(800);
 
@@ -422,6 +462,7 @@ public class InterfazPrincipal extends JFrame {
 
         panel.add(tituloDetalle, BorderLayout.NORTH);
         panel.add(pestanas, BorderLayout.CENTER);
+
         return panel;
     }
 
@@ -436,24 +477,28 @@ public class InterfazPrincipal extends JFrame {
 
         panel.add(crearScroll(tabla), "tabla");
         panel.add(vacio, "vacio");
+
         return panel;
     }
 
     private void mostrarPanelConsulta(int indice, boolean tieneDatos) {
         JPanel panel = (JPanel) pestanas.getComponentAt(indice);
         CardLayout tarjetas = (CardLayout) panel.getLayout();
+
         tarjetas.show(panel, tieneDatos ? "tabla" : "vacio");
     }
 
     private JPanel crearTarjeta() {
         JPanel panel = new JPanel(new BorderLayout(0, 9));
         panel.setBackground(Color.WHITE);
+
         panel.setBorder(
                 BorderFactory.createCompoundBorder(
                         BorderFactory.createLineBorder(BORDE),
                         new EmptyBorder(11, 13, 11, 13)
                 )
         );
+
         return panel;
     }
 
@@ -461,12 +506,14 @@ public class InterfazPrincipal extends JFrame {
             String texto, Color fondo, Color colorTexto
     ) {
         JButton boton = new JButton(texto);
+
         boton.setFont(new Font("SansSerif", Font.BOLD, 12));
         boton.setBackground(fondo);
         boton.setForeground(colorTexto);
         boton.setFocusPainted(false);
         boton.setOpaque(true);
         boton.setContentAreaFilled(true);
+
         boton.setCursor(
                 Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
         );
@@ -479,20 +526,24 @@ public class InterfazPrincipal extends JFrame {
                         new EmptyBorder(7, 10, 7, 10)
                 )
         );
+
         return boton;
     }
 
     private JScrollPane crearScroll(Component componente) {
         JScrollPane scroll = new JScrollPane(componente);
+
         scroll.setBorder(BorderFactory.createLineBorder(BORDE));
         scroll.getViewport().setBackground(Color.WHITE);
         scroll.getVerticalScrollBar().setUnitIncrement(18);
+
         return scroll;
     }
 
     private JTable crearTabla(DefaultTableModel modelo) {
         JTable tabla = new JTable(modelo);
         aplicarEstiloTabla(tabla);
+
         return tabla;
     }
 
@@ -510,6 +561,7 @@ public class InterfazPrincipal extends JFrame {
         tabla.setGridColor(BORDE);
         tabla.setIntercellSpacing(new Dimension(10, 1));
         tabla.setFillsViewportHeight(true);
+
         tabla.setSelectionMode(
                 ListSelectionModel.SINGLE_SELECTION
         );
@@ -517,13 +569,17 @@ public class InterfazPrincipal extends JFrame {
         tabla.getTableHeader().setFont(
                 new Font("SansSerif", Font.BOLD, 12)
         );
+
         tabla.getTableHeader().setForeground(AZUL);
+
         tabla.getTableHeader().setBackground(
                 new Color(237, 241, 244)
         );
+
         tabla.getTableHeader().setPreferredSize(
                 new Dimension(0, 30)
         );
+
         tabla.getTableHeader().setReorderingAllowed(false);
     }
 
@@ -577,6 +633,7 @@ public class InterfazPrincipal extends JFrame {
                     "Error al cargar",
                     JOptionPane.ERROR_MESSAGE
             );
+
             return false;
         }
     }
@@ -584,6 +641,7 @@ public class InterfazPrincipal extends JFrame {
     // combina el filtro de fechas con la búsqueda
     private void actualizarEventos() {
         Evento seleccionado = obtenerEventoSeleccionado();
+
         int idSeleccionado = seleccionado == null
                 ? -1 : seleccionado.getId();
 
@@ -685,10 +743,12 @@ public class InterfazPrincipal extends JFrame {
 
                 if (fila >= 0) {
                     tablaEventos.setRowSelectionInterval(fila, fila);
+
                     tablaEventos.scrollRectToVisible(
                             tablaEventos.getCellRect(fila, 0, true)
                     );
                 }
+
                 return;
             }
         }
@@ -739,6 +799,7 @@ public class InterfazPrincipal extends JFrame {
 
         if (evento == null) {
             tituloDetalle.setText("Información del evento");
+
             detalle.setText(
                     "No hay un evento seleccionado.\n\n"
                             + "Podés cambiar los filtros o crear uno nuevo."
@@ -797,9 +858,11 @@ public class InterfazPrincipal extends JFrame {
         pestanas.setTitleAt(
                 1, "Asistentes (" + modeloAsistentes.getRowCount() + ")"
         );
+
         pestanas.setTitleAt(
                 2, "Recursos (" + modeloRecursos.getRowCount() + ")"
         );
+
         pestanas.setTitleAt(
                 3, "Agenda (" + modeloAgenda.getRowCount() + ")"
         );
@@ -826,22 +889,28 @@ public class InterfazPrincipal extends JFrame {
         JTextField nombre = new JTextField(
                 nuevo ? "" : evento.getNombre()
         );
+
         JTextField descripcion = new JTextField(
                 nuevo ? "" : evento.getDescripcion()
         );
+
         JTextField ubicacion = new JTextField(
                 nuevo ? "" : evento.getUbicacion()
         );
+
         JTextField fecha = new JTextField(
                 nuevo ? LocalDate.now().toString()
                         : evento.getFecha().toString()
         );
+
         JTextField inicio = new JTextField(
                 nuevo ? "11:00" : evento.getHoraInicio().toString()
         );
+
         JTextField fin = new JTextField(
                 nuevo ? "13:00" : evento.getHoraFin().toString()
         );
+
         JTextField capacidad = new JTextField(
                 nuevo ? "100" : String.valueOf(evento.getCapacidad())
         );
@@ -872,10 +941,13 @@ public class InterfazPrincipal extends JFrame {
             try {
                 LocalDate fechaEvento =
                         LocalDate.parse(fecha.getText().trim());
+
                 LocalTime horaInicio =
                         LocalTime.parse(inicio.getText().trim());
+
                 LocalTime horaFin =
                         LocalTime.parse(fin.getText().trim());
+
                 int cupo = Integer.parseInt(capacidad.getText().trim());
 
                 if (nuevo) {
@@ -912,6 +984,7 @@ public class InterfazPrincipal extends JFrame {
             }
 
             boolean guardadoEnArchivo = guardarCambios();
+
             actualizarEventos();
             seleccionarEvento(guardado.getId());
             actualizarDetalle();
@@ -922,6 +995,7 @@ public class InterfazPrincipal extends JFrame {
                         this, "El evento se guardó correctamente."
                 );
             }
+
             return;
         }
     }
@@ -976,6 +1050,7 @@ public class InterfazPrincipal extends JFrame {
                             "Sin cupo disponible",
                             JOptionPane.WARNING_MESSAGE
                     );
+
                     continue;
                 }
             } catch (RuntimeException e) {
@@ -984,6 +1059,7 @@ public class InterfazPrincipal extends JFrame {
             }
 
             boolean guardado = guardarCambios();
+
             actualizarEventos();
             pestanas.setSelectedIndex(1);
 
@@ -992,6 +1068,7 @@ public class InterfazPrincipal extends JFrame {
                         this, "El asistente fue registrado correctamente."
                 );
             }
+
             return;
         }
     }
@@ -1031,6 +1108,7 @@ public class InterfazPrincipal extends JFrame {
                         this, "El recurso fue registrado correctamente."
                 );
             }
+
             return;
         }
     }
@@ -1050,15 +1128,18 @@ public class InterfazPrincipal extends JFrame {
                     "No hay recursos",
                     JOptionPane.INFORMATION_MESSAGE
             );
+
             return;
         }
 
         JComboBox<Recurso> recursos = new JComboBox<>(
                 gestor.obtenerRecursos().toArray(new Recurso[0])
         );
+
         JTextField cantidad = new JTextField("1");
 
         JPanel formulario = new JPanel(new GridLayout(0, 2, 10, 10));
+
         formulario.add(new JLabel("Recurso:"));
         formulario.add(recursos);
         formulario.add(new JLabel("Cantidad a asignar:"));
@@ -1092,6 +1173,7 @@ public class InterfazPrincipal extends JFrame {
                             "Recurso no disponible",
                             JOptionPane.WARNING_MESSAGE
                     );
+
                     continue;
                 }
             } catch (RuntimeException e) {
@@ -1100,6 +1182,7 @@ public class InterfazPrincipal extends JFrame {
             }
 
             boolean guardado = guardarCambios();
+
             actualizarDetalle();
             pestanas.setSelectedIndex(2);
 
@@ -1108,6 +1191,7 @@ public class InterfazPrincipal extends JFrame {
                         this, "El recurso fue asignado correctamente."
                 );
             }
+
             return;
         }
     }
@@ -1122,6 +1206,7 @@ public class InterfazPrincipal extends JFrame {
         JTextField hora = new JTextField(
                 evento.getHoraInicio().toString()
         );
+
         JTextField descripcion = new JTextField();
 
         JPanel formulario = new JPanel(new GridLayout(0, 2, 10, 10));
@@ -1163,6 +1248,7 @@ public class InterfazPrincipal extends JFrame {
             }
 
             boolean guardado = guardarCambios();
+
             actualizarDetalle();
             pestanas.setSelectedIndex(3);
 
@@ -1171,6 +1257,7 @@ public class InterfazPrincipal extends JFrame {
                         this, "La tarea fue guardada correctamente."
                 );
             }
+
             return;
         }
     }
@@ -1198,6 +1285,7 @@ public class InterfazPrincipal extends JFrame {
         }
 
         gestor.eliminarEvento(evento.getId());
+
         boolean guardado = guardarCambios();
         actualizarEventos();
 
@@ -1223,6 +1311,7 @@ public class InterfazPrincipal extends JFrame {
                     "Error al guardar",
                     JOptionPane.ERROR_MESSAGE
             );
+
             return false;
         }
     }
@@ -1232,11 +1321,13 @@ public class InterfazPrincipal extends JFrame {
 
         fechaCalendario = evento == null
                 ? LocalDate.now() : evento.getFecha();
+
         mesCalendario = YearMonth.from(fechaCalendario);
 
         JDialog ventana = new JDialog(
                 this, "Calendario de eventos", true
         );
+
         ventana.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
 
         JPanel contenido = new JPanel(new BorderLayout(12, 12));
@@ -1280,6 +1371,7 @@ public class InterfazPrincipal extends JFrame {
         JLabel leyenda = new JLabel(
                 "Azul: días con eventos. Dorado: día seleccionado."
         );
+
         leyenda.setForeground(GRIS);
         leyenda.setFont(new Font("SansSerif", Font.PLAIN, 12));
 
@@ -1307,6 +1399,7 @@ public class InterfazPrincipal extends JFrame {
 
         ventana.setContentPane(contenido);
         actualizarCalendario(grilla, tituloMes, actividades);
+
         ventana.setMinimumSize(new Dimension(810, 470));
         ventana.pack();
         ventana.setLocationRelativeTo(this);
@@ -1332,6 +1425,7 @@ public class InterfazPrincipal extends JFrame {
             JLabel etiqueta = new JLabel(dia, SwingConstants.CENTER);
             etiqueta.setForeground(AZUL);
             etiqueta.setFont(new Font("SansSerif", Font.BOLD, 12));
+
             grilla.add(etiqueta);
         }
 
@@ -1347,7 +1441,9 @@ public class InterfazPrincipal extends JFrame {
              numero++) {
 
             LocalDate fecha = mesCalendario.atDay(numero);
-            List<Evento> eventos = gestor.obtenerEventosPorFecha(fecha);
+
+            List<Evento> eventos =
+                    gestor.obtenerEventosPorFecha(fecha);
 
             JButton boton = crearBoton(
                     String.valueOf(numero),
@@ -1391,6 +1487,7 @@ public class InterfazPrincipal extends JFrame {
         }
 
         mostrarActividadesDelDia(actividades);
+
         grilla.revalidate();
         grilla.repaint();
     }
@@ -1445,6 +1542,7 @@ public class InterfazPrincipal extends JFrame {
 
         JTextArea aviso = new JTextArea();
         configurarAreaTexto(aviso);
+
         aviso.append(
                 "Eventos programados para los próximos 3 días:\n\n"
         );
@@ -1465,7 +1563,9 @@ public class InterfazPrincipal extends JFrame {
         scroll.setPreferredSize(new Dimension(470, 240));
 
         JOptionPane.showMessageDialog(
-                this, scroll, "Recordatorio de eventos",
+                this,
+                scroll,
+                "Recordatorio de eventos",
                 JOptionPane.INFORMATION_MESSAGE
         );
     }
