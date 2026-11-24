@@ -1,0 +1,10 @@
+1;Equipo de sonido profesional;Equipamiento audiovisual;4;0
+2;Vallas de seguridad;Seguridad y control de accesos;500;0
+3;Generador eléctrico;Energía y soporte técnico;6;0
+4;Pantalla LED;Equipamiento audiovisual;4;0
+5;Micrófono inalámbrico;Equipamiento audiovisual;20;0
+6;Sillas;Mobiliario;1000;0
+7;Puesto de primeros auxilios;Asistencia sanitaria;12;0
+8;Credencial de prensa;Comunicación y prensa;150;0
+9;proyector test;Equipamiento audiovisual;1;0
+10;Proyector de prueba;Equipamiento audiovisual;1;1

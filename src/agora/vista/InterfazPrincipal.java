@@ -10,6 +10,7 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
@@ -24,6 +25,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Consumer;
 
 public class InterfazPrincipal extends JFrame {
 
@@ -123,7 +125,7 @@ public class InterfazPrincipal extends JFrame {
         tablaEventos = new JTable(modeloEventos);
 
         filtroEventos = new JComboBox<>(
-                new String[]{"Todos", "Próximos", "Pasados"}
+                new String[]{"Todos", "Próximos", "Pasados", "A revisar"}
         );
 
         campoBusqueda = new JTextField(18);
@@ -163,6 +165,10 @@ public class InterfazPrincipal extends JFrame {
         UIManager.put("OptionPane.background", Color.WHITE);
         UIManager.put("OptionPane.messageForeground", AZUL);
         UIManager.put("OptionPane.messageFont", fuente);
+        UIManager.put("OptionPane.okButtonText", "Aceptar");
+        UIManager.put("OptionPane.cancelButtonText", "Cancelar");
+        UIManager.put("OptionPane.yesButtonText", "Sí");
+        UIManager.put("OptionPane.noButtonText", "No");
         UIManager.put("TabbedPane.font", fuente);
         UIManager.put("TabbedPane.selected", Color.WHITE);
         UIManager.put("TabbedPane.contentAreaColor", Color.WHITE);
@@ -664,6 +670,7 @@ public class InterfazPrincipal extends JFrame {
     private void configurarTablaEventos() {
         aplicarEstiloTabla(tablaEventos);
         tablaEventos.setRowHeight(34);
+        configurarResaltadoEventos();
         ajustarColumnasEventos();
 
         tablaEventos.setRowSorter(crearOrdenadorEventos());
@@ -675,21 +682,64 @@ public class InterfazPrincipal extends JFrame {
         });
     }
 
-    private TableRowSorter<DefaultTableModel> crearOrdenadorEventos() {
-        TableRowSorter<DefaultTableModel> ordenador =
-                new TableRowSorter<>(modeloEventos);
+    private boolean eventoRequiereRevision(Evento evento) {
+        return evento != null && !evento.esPasado()
+                && gestor.tieneConflictosDeRecursos(evento.getId());
+    }
 
-        // ordena fechas y horarios por su valor, no por su texto
-        ordenador.setComparator(
-                1, (a, b) -> ((LocalDate) a).compareTo((LocalDate) b)
+    // usa el índice del modelo para conservar el color al ordenar la tabla
+    private void configurarResaltadoEventos() {
+        DefaultTableCellRenderer renderer = new DefaultTableCellRenderer();
+        tablaEventos.setDefaultRenderer(
+                Object.class, (tabla, valor, seleccionado, foco, fila, columna) -> {
+                    Component celda = renderer.getTableCellRendererComponent(
+                            tabla, valor, seleccionado, foco, fila, columna
+                    );
+                    int indice = tabla.convertRowIndexToModel(fila);
+                    Evento evento = indice >= 0 && indice < eventosVisibles.size()
+                            ? eventosVisibles.get(indice) : null;
+                    boolean revisar = eventoRequiereRevision(evento);
+
+                    celda.setForeground(revisar ? ROJO
+                            : seleccionado ? tabla.getSelectionForeground() : AZUL);
+                    celda.setBackground(revisar
+                            ? seleccionado ? new Color(247, 215, 215)
+                            : new Color(255, 243, 243)
+                            : seleccionado ? SELECCION : Color.WHITE);
+                    renderer.setToolTipText(revisar
+                            ? "Este evento tiene recursos a revisar. Consultá su pestaña Recursos."
+                            : null);
+                    return celda;
+                }
         );
-        ordenador.setComparator(
-                2, (a, b) -> ((LocalTime) a).compareTo((LocalTime) b)
-        );
-        ordenador.setComparator(
-                3, (a, b) -> ((LocalTime) a).compareTo((LocalTime) b)
-        );
+    }
+
+    private TableRowSorter<DefaultTableModel> crearOrdenadorEventos() {
+        return crearOrdenador(modeloEventos, 1, 2, 3);
+    }
+
+    // compara valores del mismo tipo, evita ordenar números como texto
+    private TableRowSorter<DefaultTableModel> crearOrdenador(
+            DefaultTableModel modelo, int... columnas
+    ) {
+        TableRowSorter<DefaultTableModel> ordenador = new TableRowSorter<>(modelo);
+        for (int columna : columnas) {
+            ordenador.setComparator(columna, this::compararValores);
+        }
         return ordenador;
+    }
+
+    private int compararValores(Object primero, Object segundo) {
+        if (primero instanceof LocalDate a && segundo instanceof LocalDate b) {
+            return a.compareTo(b);
+        }
+        if (primero instanceof LocalTime a && segundo instanceof LocalTime b) {
+            return a.compareTo(b);
+        }
+        if (primero instanceof Number a && segundo instanceof Number b) {
+            return Long.compare(a.longValue(), b.longValue());
+        }
+        return String.valueOf(primero).compareToIgnoreCase(String.valueOf(segundo));
     }
 
     private void ajustarColumnasEventos() {
@@ -749,6 +799,10 @@ public class InterfazPrincipal extends JFrame {
             base = gestor.obtenerEventosFuturos();
         } else if ("Pasados".equals(filtro)) {
             base = gestor.obtenerEventosPasados();
+        } else if ("A revisar".equals(filtro)) {
+            base = gestor.obtenerEventosFuturos().stream()
+                    .filter(this::eventoRequiereRevision)
+                    .toList();
         } else {
             base = gestor.obtenerEventosOrdenados();
         }
@@ -1015,12 +1069,174 @@ public class InterfazPrincipal extends JFrame {
         actualizarAvisoConflictos();
     }
 
+
+    // arma las filas de los formularios sin repetir etiquetas y distribución
+    private JPanel crearCampos(String[] etiquetas, JComponent... campos) {
+        if (etiquetas.length != campos.length) {
+            throw new IllegalArgumentException("Cada campo necesita una etiqueta.");
+        }
+        JPanel panel = new JPanel(new GridLayout(0, 2, 10, 10));
+        for (int i = 0; i < campos.length; i++) {
+            panel.add(new JLabel(etiquetas[i]));
+            panel.add(campos[i]);
+        }
+        return panel;
+    }
+
     private boolean confirmarFormulario(JPanel panel, String titulo) {
-        return JOptionPane.showConfirmDialog(
+        Object[] opciones = {"Guardar cambios", "Cancelar"};
+        return JOptionPane.showOptionDialog(
                 this, panel, titulo,
-                JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.PLAIN_MESSAGE
-        ) == JOptionPane.OK_OPTION;
+                JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE,
+                null, opciones, opciones[0]
+        ) == 0;
+    }
+
+    // permite elegir una fecha sin impedir la escritura manual
+    private void mostrarSelectorFecha(JTextField campo) {
+        LocalDate inicial;
+        try {
+            inicial = LocalDate.parse(campo.getText().trim());
+            if (inicial.getYear() < 1 || inicial.getYear() > 9999) {
+                inicial = LocalDate.now();
+            }
+        } catch (DateTimeParseException e) {
+            inicial = LocalDate.now();
+        }
+
+        Window propietario = SwingUtilities.getWindowAncestor(campo);
+        JDialog ventana = new JDialog(
+                propietario, "Elegir fecha", Dialog.ModalityType.APPLICATION_MODAL
+        );
+        ventana.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+
+        LocalDate[] seleccionada = {inicial};
+        YearMonth[] mes = {YearMonth.from(inicial)};
+        boolean[] actualizandoMes = {false};
+
+        JComboBox<String> meses = new JComboBox<>(new String[]{
+                "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+        });
+        JSpinner anio = new JSpinner(new SpinnerNumberModel(
+                inicial.getYear(), 1, 9999, 1
+        ));
+        JSpinner.NumberEditor editorAnio = new JSpinner.NumberEditor(anio, "0000");
+        anio.setEditor(editorAnio);
+        editorAnio.getTextField().setEditable(false);
+
+        JButton anterior = crearBoton("<", Color.WHITE, AZUL);
+        JButton siguiente = crearBoton(">", Color.WHITE, AZUL);
+        anterior.setToolTipText("Mes anterior");
+        siguiente.setToolTipText("Mes siguiente");
+
+        JPanel navegacion = new JPanel(new BorderLayout(7, 0));
+        navegacion.setOpaque(false);
+        JPanel periodo = new JPanel(new BorderLayout(6, 0));
+        periodo.setOpaque(false);
+        periodo.add(meses, BorderLayout.CENTER);
+        periodo.add(anio, BorderLayout.EAST);
+        navegacion.add(anterior, BorderLayout.WEST);
+        navegacion.add(periodo, BorderLayout.CENTER);
+        navegacion.add(siguiente, BorderLayout.EAST);
+
+        JPanel grilla = new JPanel(new GridLayout(7, 7, 4, 4));
+        grilla.setBackground(FONDO);
+        grilla.setPreferredSize(new Dimension(370, 270));
+        JLabel elegida = new JLabel();
+        elegida.setForeground(AZUL);
+
+        Runnable actualizar = () -> {
+            actualizandoMes[0] = true;
+            try {
+                meses.setSelectedIndex(mes[0].getMonthValue() - 1);
+                anio.setValue(mes[0].getYear());
+            } finally {
+                actualizandoMes[0] = false;
+            }
+
+            anterior.setEnabled(!mes[0].equals(YearMonth.of(1, 1)));
+            siguiente.setEnabled(!mes[0].equals(YearMonth.of(9999, 12)));
+            dibujarMes(
+                    grilla, mes[0], seleccionada[0], false,
+                    fecha -> {
+                        seleccionada[0] = fecha;
+                        Runnable refrescar =
+                                (Runnable) grilla.getClientProperty("actualizar");
+                        refrescar.run();
+                    }
+            );
+            elegida.setText("Fecha elegida: " + seleccionada[0].format(FECHA));
+        };
+        grilla.putClientProperty("actualizar", actualizar);
+
+        meses.addActionListener(e -> {
+            if (!actualizandoMes[0]) {
+                mes[0] = YearMonth.of(
+                        (Integer) anio.getValue(), meses.getSelectedIndex() + 1
+                );
+                actualizar.run();
+            }
+        });
+        anio.addChangeListener(e -> {
+            if (!actualizandoMes[0]) {
+                mes[0] = YearMonth.of(
+                        (Integer) anio.getValue(), meses.getSelectedIndex() + 1
+                );
+                actualizar.run();
+            }
+        });
+        anterior.addActionListener(e -> {
+            mes[0] = mes[0].minusMonths(1);
+            actualizar.run();
+        });
+        siguiente.addActionListener(e -> {
+            mes[0] = mes[0].plusMonths(1);
+            actualizar.run();
+        });
+
+        JButton hoy = crearBoton("Hoy", Color.WHITE, AZUL);
+        JButton usar = crearBoton("Confirmar", DORADO, AZUL);
+        JButton cancelar = crearBoton("Cancelar", Color.WHITE, AZUL);
+        hoy.addActionListener(e -> {
+            seleccionada[0] = LocalDate.now();
+            mes[0] = YearMonth.from(seleccionada[0]);
+            actualizar.run();
+        });
+        usar.addActionListener(e -> {
+            campo.setText(seleccionada[0].toString());
+            ventana.dispose();
+            campo.requestFocusInWindow();
+        });
+        cancelar.addActionListener(e -> ventana.dispose());
+
+        JPanel botones = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        botones.setOpaque(false);
+        botones.add(hoy);
+        botones.add(usar);
+        botones.add(cancelar);
+        JPanel inferior = new JPanel(new BorderLayout(0, 10));
+        inferior.setOpaque(false);
+        inferior.add(elegida, BorderLayout.NORTH);
+        inferior.add(botones, BorderLayout.SOUTH);
+
+        JPanel contenido = new JPanel(new BorderLayout(0, 12));
+        contenido.setBackground(FONDO);
+        contenido.setBorder(new EmptyBorder(12, 12, 12, 12));
+        contenido.add(navegacion, BorderLayout.NORTH);
+        contenido.add(grilla, BorderLayout.CENTER);
+        contenido.add(inferior, BorderLayout.SOUTH);
+        ventana.setContentPane(contenido);
+        ventana.getRootPane().setDefaultButton(usar);
+        ventana.getRootPane().registerKeyboardAction(
+                e -> ventana.dispose(), KeyStroke.getKeyStroke("ESCAPE"),
+                JComponent.WHEN_IN_FOCUSED_WINDOW
+        );
+        actualizar.run();
+        ventana.pack();
+        ventana.setResizable(false);
+        ventana.setLocationRelativeTo(propietario);
+        ventana.setVisible(true);
     }
 
     // conserva los campos cuando hay un error de validación
@@ -1040,6 +1256,13 @@ public class InterfazPrincipal extends JFrame {
                 nuevo ? LocalDate.now().toString()
                         : evento.getFecha().toString()
         );
+        fecha.setToolTipText("Escribí AAAA-MM-DD o elegí una fecha en el calendario");
+        JButton elegirFecha = crearBoton("Calendario", Color.WHITE, AZUL);
+        elegirFecha.addActionListener(e -> mostrarSelectorFecha(fecha));
+        JPanel selectorFecha = new JPanel(new BorderLayout(6, 0));
+        selectorFecha.setOpaque(false);
+        selectorFecha.add(fecha, BorderLayout.CENTER);
+        selectorFecha.add(elegirFecha, BorderLayout.EAST);
         JTextField inicio = new JTextField(
                 nuevo ? "11:00" : evento.getHoraInicio().toString()
         );
@@ -1050,23 +1273,11 @@ public class InterfazPrincipal extends JFrame {
                 nuevo ? "100" : String.valueOf(evento.getCapacidad())
         );
 
-        JPanel formulario = new JPanel(new GridLayout(0, 2, 10, 10));
-        formulario.setPreferredSize(new Dimension(510, 265));
-
-        formulario.add(new JLabel("Nombre:"));
-        formulario.add(nombre);
-        formulario.add(new JLabel("Descripción:"));
-        formulario.add(descripcion);
-        formulario.add(new JLabel("Ubicación:"));
-        formulario.add(ubicacion);
-        formulario.add(new JLabel("Fecha (AAAA-MM-DD):"));
-        formulario.add(fecha);
-        formulario.add(new JLabel("Inicio (HH:MM):"));
-        formulario.add(inicio);
-        formulario.add(new JLabel("Finalización (HH:MM):"));
-        formulario.add(fin);
-        formulario.add(new JLabel("Capacidad:"));
-        formulario.add(capacidad);
+        JPanel formulario = crearCampos(
+                new String[]{"Nombre:", "Descripción:", "Ubicación:", "Fecha (AAAA-MM-DD):", "Inicio (HH:MM):", "Finalización (HH:MM):", "Capacidad:"},
+                nombre, descripcion, ubicacion, selectorFecha, inicio, fin, capacidad
+        );
+        formulario.setPreferredSize(new Dimension(590, 265));
 
         while (confirmarFormulario(
                 formulario, nuevo ? "Nuevo evento" : "Editar evento"
@@ -1125,73 +1336,17 @@ public class InterfazPrincipal extends JFrame {
 
     private void inscribirAsistente() {
         Evento evento = obtenerEventoSeleccionado();
-
         if (evento == null) {
             return;
         }
-
-        JTextField nombre = new JTextField();
-        JTextField documento = new JTextField();
-        JTextField cargo = new JTextField();
-        JTextField institucion = new JTextField();
-        JTextField email = new JTextField();
-
-        documento.setToolTipText("Solo números, sin puntos ni espacios");
-        nombre.setToolTipText("Obligatorio. Ejemplo: Ana Pérez");
-        email.setToolTipText("Opcional. Ejemplo: nombre@dominio.com");
-
-        JPanel formulario = new JPanel(new GridLayout(0, 2, 10, 10));
-        formulario.setPreferredSize(new Dimension(480, 200));
-
-        formulario.add(new JLabel("Nombre completo *:"));
-        formulario.add(nombre);
-        formulario.add(new JLabel("Documento * (solo números):"));
-        formulario.add(documento);
-        formulario.add(new JLabel("Cargo:"));
-        formulario.add(cargo);
-        formulario.add(new JLabel("Institución:"));
-        formulario.add(institucion);
-        formulario.add(new JLabel("Correo electrónico (opcional):"));
-        formulario.add(email);
-
-        while (confirmarFormulario(
-                formulario, "Inscribir asistente - " + evento.getNombre()
-        )) {
-            try {
-                Asistente asistente = new Asistente(
-                        gestor.obtenerSiguienteIdAsistente(),
-                        nombre.getText().trim(),
-                        documento.getText().trim(),
-                        cargo.getText().trim(),
-                        institucion.getText().trim(),
-                        email.getText().trim()
-                );
-
-                if (!gestor.inscribirAsistente(evento.getId(), asistente)) {
-                    JOptionPane.showMessageDialog(
-                            this,
-                            "El evento alcanzó su capacidad máxima.",
-                            "Sin cupo disponible",
-                            JOptionPane.WARNING_MESSAGE
-                    );
-                    continue;
-                }
-            } catch (RuntimeException e) {
-                mostrarErrorDatos(e);
-                continue;
-            }
-
-            boolean guardado = guardarCambios();
-
-            actualizarEventos();
-            pestanas.setSelectedIndex(1);
-            seleccionarAsistente(documento.getText().trim());
-
-            if (guardado) {
-                mostrarEstado("El asistente fue registrado correctamente.");
-            }
+        if (!evento.hayCupo()) {
+            mostrarMensaje(
+                    "El evento alcanzó su capacidad máxima.",
+                    "Sin cupo disponible", JOptionPane.WARNING_MESSAGE
+            );
             return;
         }
+        mostrarFormularioAsistente(evento, null);
     }
 
     // identifica al asistente por documento y no por la posición visual
@@ -1249,67 +1404,81 @@ public class InterfazPrincipal extends JFrame {
     private void editarAsistente() {
         Evento evento = obtenerEventoSeleccionado();
         Asistente asistente = obtenerAsistenteSeleccionado();
-
-        if (evento == null || asistente == null) {
-            return;
+        if (evento != null && asistente != null) {
+            mostrarFormularioAsistente(evento, asistente);
         }
+    }
 
-        JTextField nombre = new JTextField(asistente.getNombreCompleto());
-        JTextField documento = new JTextField(asistente.getDocumento());
-        JTextField cargo = new JTextField(asistente.getCargo());
-        JTextField institucion = new JTextField(asistente.getInstitucion());
-        JTextField email = new JTextField(asistente.getEmail());
+    // alta y edición comparten los campos y la presentación
+    private void mostrarFormularioAsistente(Evento evento, Asistente asistente) {
+        boolean nuevo = asistente == null;
+        JTextField nombre = new JTextField(nuevo ? "" : asistente.getNombreCompleto());
+        JTextField documento = new JTextField(nuevo ? "" : asistente.getDocumento());
+        JTextField cargo = new JTextField(nuevo ? "" : asistente.getCargo());
+        JTextField institucion = new JTextField(nuevo ? "" : asistente.getInstitucion());
+        JTextField email = new JTextField(nuevo ? "" : asistente.getEmail());
 
-        // conserva el documento con el que se hizo la inscripción
-        documento.setEditable(false);
-        documento.setBackground(FONDO);
+        nombre.setToolTipText("Obligatorio. Ejemplo: Ana Pérez");
         documento.setToolTipText(
-                "El documento no se modifica desde este formulario."
+                nuevo ? "Solo números, sin puntos ni espacios"
+                        : "El documento de la inscripción se conserva"
         );
+        documento.setEditable(nuevo);
+        if (!nuevo) {
+            documento.setBackground(FONDO);
+        }
+        email.setToolTipText("Opcional. Ejemplo: nombre@dominio.com");
 
-        JPanel campos = new JPanel(new GridLayout(0, 2, 10, 10));
-        campos.add(new JLabel("Nombre completo *:"));
-        campos.add(nombre);
-        campos.add(new JLabel("Documento:"));
-        campos.add(documento);
-        campos.add(new JLabel("Cargo:"));
-        campos.add(cargo);
-        campos.add(new JLabel("Institución:"));
-        campos.add(institucion);
-        campos.add(new JLabel("Correo (opcional):"));
-        campos.add(email);
-
+        JPanel campos = crearCampos(
+                new String[]{"Nombre completo *:", "Documento *:", "Cargo:",
+                        "Institución:", "Correo (opcional):"},
+                nombre, documento, cargo, institucion, email
+        );
         JPanel formulario = new JPanel(new BorderLayout(0, 12));
         formulario.add(campos, BorderLayout.CENTER);
-
         JLabel ayuda = new JLabel(
-                "* campo obligatorio. El documento se conserva."
+                nuevo ? "* campos obligatorios. Documento sin puntos ni espacios."
+                        : "* campos obligatorios. El documento se conserva."
         );
         ayuda.setForeground(GRIS);
         formulario.add(ayuda, BorderLayout.SOUTH);
-        formulario.setPreferredSize(new Dimension(500, 220));
+        formulario.setPreferredSize(new Dimension(520, 220));
 
-        while (confirmarFormulario(
-                formulario, "Editar asistente - " + evento.getNombre()
-        )) {
+        String titulo = (nuevo ? "Inscribir asistente - " : "Editar asistente - ")
+                + evento.getNombre();
+
+        while (confirmarFormulario(formulario, titulo)) {
             try {
-                gestor.actualizarAsistente(
-                        evento.getId(), asistente.getId(),
-                        nombre.getText(), cargo.getText(),
-                        institucion.getText(), email.getText()
-                );
+                if (nuevo) {
+                    Asistente inscripto = new Asistente(
+                            gestor.obtenerSiguienteIdAsistente(),
+                            nombre.getText(), documento.getText(), cargo.getText(),
+                            institucion.getText(), email.getText()
+                    );
+                    if (!gestor.inscribirAsistente(evento.getId(), inscripto)) {
+                        mostrarMensaje(
+                                "El evento alcanzó su capacidad máxima.",
+                                "Sin cupo disponible", JOptionPane.WARNING_MESSAGE
+                        );
+                        continue;
+                    }
+                } else {
+                    gestor.actualizarAsistente(
+                            evento.getId(), asistente.getId(), nombre.getText(),
+                            cargo.getText(), institucion.getText(), email.getText()
+                    );
+                }
             } catch (RuntimeException e) {
                 mostrarErrorDatos(e);
                 continue;
             }
 
             boolean guardado = guardarCambios();
-
-            actualizarDetalle();
-            seleccionarAsistente(asistente.getDocumento());
-
+            actualizarEventos();
+            pestanas.setSelectedIndex(1);
+            seleccionarAsistente(documento.getText().trim());
             if (guardado) {
-                mostrarEstado("Datos del asistente actualizados.");
+                mostrarEstado(nuevo ? "Asistente registrado." : "Datos del asistente actualizados.");
             }
             return;
         }
@@ -1373,15 +1542,11 @@ public class InterfazPrincipal extends JFrame {
         JTextField tipo = new JTextField();
         JTextField cantidad = new JTextField("1");
 
-        JPanel formulario = new JPanel(new GridLayout(0, 2, 10, 10));
+        JPanel formulario = crearCampos(
+                new String[]{"Nombre:", "Tipo:", "Cantidad total:"},
+                nombre, tipo, cantidad
+        );
         formulario.setPreferredSize(new Dimension(430, 115));
-
-        formulario.add(new JLabel("Nombre:"));
-        formulario.add(nombre);
-        formulario.add(new JLabel("Tipo:"));
-        formulario.add(tipo);
-        formulario.add(new JLabel("Cantidad total:"));
-        formulario.add(cantidad);
 
         while (confirmarFormulario(formulario, "Registrar recurso")) {
             try {
@@ -1491,6 +1656,18 @@ public class InterfazPrincipal extends JFrame {
         JComboBox<Recurso> recursos = new JComboBox<>(
                 gestor.obtenerRecursos().toArray(new Recurso[0])
         );
+        DefaultListCellRenderer renderer = new DefaultListCellRenderer();
+        recursos.setRenderer((lista, valor, indice, seleccionado, foco) -> {
+            Component componente = renderer.getListCellRendererComponent(
+                    lista, valor, indice, seleccionado, foco
+            );
+            if (valor != null) {
+                renderer.setText(valor.getNombre() + " - " + valor.getTipo()
+                        + " (" + valor.getCantidadOperativa() + " en condiciones de "
+                        + valor.getCantidadTotal() + ")");
+            }
+            return componente;
+        });
 
         JTextField cantidad = new JTextField("1");
         JLabel reservaActual = new JLabel();
@@ -1527,11 +1704,10 @@ public class InterfazPrincipal extends JFrame {
         );
         actualizarDisponibilidad.run();
 
-        JPanel campos = new JPanel(new GridLayout(0, 2, 10, 10));
-        campos.add(new JLabel("Recurso:"));
-        campos.add(recursos);
-        campos.add(new JLabel("Cantidad total a reservar *:"));
-        campos.add(cantidad);
+        JPanel campos = crearCampos(
+                new String[]{"Recurso:", "Cantidad total a reservar *:"},
+                recursos, cantidad
+        );
 
         JPanel ayuda = new JPanel(new GridLayout(0, 1, 0, 5));
         ayuda.setOpaque(false);
@@ -1631,7 +1807,7 @@ public class InterfazPrincipal extends JFrame {
 
             boolean guardado = guardarCambios();
 
-            actualizarDetalle();
+            actualizarEventos();
             seleccionarRecurso(recurso.getId());
             pestanas.setSelectedIndex(2);
 
@@ -1673,12 +1849,12 @@ public class InterfazPrincipal extends JFrame {
                 evento.getId(), recurso.getId()
         )) {
             mostrarEstado("La reserva ya no está registrada.");
-            actualizarDetalle();
+            actualizarEventos();
             return;
         }
 
         boolean guardado = guardarCambios();
-        actualizarDetalle();
+        actualizarEventos();
 
         if (guardado) {
             mostrarEstado(
@@ -1775,11 +1951,10 @@ public class InterfazPrincipal extends JFrame {
                         : evento.getAgenda().get(horaOriginal)
         );
 
-        JPanel campos = new JPanel(new GridLayout(0, 2, 10, 10));
-        campos.add(new JLabel("Hora * (HH:MM):"));
-        campos.add(hora);
-        campos.add(new JLabel("Descripción *:"));
-        campos.add(descripcion);
+        JPanel campos = crearCampos(
+                new String[]{"Hora * (HH:MM):", "Descripción *:"},
+                hora, descripcion
+        );
 
         JLabel ayuda = new JLabel(
                 "Horario del evento: "
@@ -2075,82 +2250,61 @@ public class InterfazPrincipal extends JFrame {
     private void actualizarCalendario(
             JPanel grilla, JLabel tituloMes, JTextArea actividades
     ) {
-        grilla.removeAll();
-
         tituloMes.setText(
                 mesCalendario.atDay(1).format(
                         DateTimeFormatter.ofPattern("MMMM yyyy", IDIOMA)
                 )
         );
+        dibujarMes(
+                grilla, mesCalendario, fechaCalendario, true,
+                fecha -> {
+                    fechaCalendario = fecha;
+                    actualizarCalendario(grilla, tituloMes, actividades);
+                }
+        );
+        mostrarActividadesDelDia(actividades);
+    }
 
-        String[] dias = {
-                "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"
-        };
-
-        for (String dia : dias) {
-            JLabel etiqueta = new JLabel(dia, SwingConstants.CENTER);
-            etiqueta.setForeground(AZUL);
-            etiqueta.setFont(new Font("SansSerif", Font.BOLD, 12));
-            grilla.add(etiqueta);
+    // el calendario y el selector usan la misma grilla
+    private void dibujarMes(
+            JPanel grilla, YearMonth mes, LocalDate seleccionada,
+            boolean mostrarEventos, Consumer<LocalDate> alElegir
+    ) {
+        grilla.removeAll();
+        for (String nombre : new String[]{"Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"}) {
+            JLabel dia = new JLabel(nombre, SwingConstants.CENTER);
+            dia.setForeground(AZUL);
+            dia.setFont(new Font("SansSerif", Font.BOLD, 12));
+            grilla.add(dia);
         }
-
-        int espacios = mesCalendario.atDay(1)
-                .getDayOfWeek().getValue() - 1;
-
+        int espacios = mes.atDay(1).getDayOfWeek().getValue() - 1;
         for (int i = 0; i < espacios; i++) {
             grilla.add(new JLabel());
         }
-
-        for (int numero = 1;
-             numero <= mesCalendario.lengthOfMonth();
-             numero++) {
-
-            LocalDate fecha = mesCalendario.atDay(numero);
-            List<Evento> eventos =
-                    gestor.obtenerEventosPorFecha(fecha);
-
+        LocalDate hoy = LocalDate.now();
+        for (int numero = 1; numero <= mes.lengthOfMonth(); numero++) {
+            LocalDate fecha = mes.atDay(numero);
+            int eventos = mostrarEventos
+                    ? gestor.obtenerEventosPorFecha(fecha).size() : 0;
+            boolean elegida = fecha.equals(seleccionada);
+            Color fondo = elegida && !mostrarEventos ? DORADO
+                    : eventos > 0 ? AZUL : Color.WHITE;
             JButton boton = crearBoton(
-                    String.valueOf(numero),
-                    eventos.isEmpty() ? Color.WHITE : AZUL,
-                    eventos.isEmpty() ? AZUL : Color.WHITE
+                    String.valueOf(numero), fondo,
+                    fondo.equals(AZUL) ? Color.WHITE : AZUL
             );
-
-            if (fecha.equals(fechaCalendario)) {
-                boton.setBorder(
-                        BorderFactory.createLineBorder(DORADO, 3)
-                );
-            } else if (fecha.equals(LocalDate.now())) {
-                boton.setBorder(
-                        BorderFactory.createLineBorder(
-                                new Color(53, 109, 140), 2
-                        )
-                );
-            } else {
-                boton.setBorder(
-                        BorderFactory.createLineBorder(BORDE)
-                );
-            }
-
-            boton.setToolTipText(
-                    eventos.isEmpty()
-                            ? "Sin eventos"
-                            : eventos.size() + " evento(s)"
-            );
-
-            boton.addActionListener(e -> {
-                fechaCalendario = fecha;
-                actualizarCalendario(grilla, tituloMes, actividades);
-            });
-
+            Color borde = elegida ? DORADO : fecha.equals(hoy) ? AZUL : BORDE;
+            boton.setBorder(BorderFactory.createLineBorder(
+                    borde, elegida ? 3 : fecha.equals(hoy) ? 2 : 1
+            ));
+            boton.setToolTipText(fecha.format(FECHA)
+                    + (mostrarEventos ? " · " + eventos + " evento(s)" : ""));
+            boton.addActionListener(e -> alElegir.accept(fecha));
             grilla.add(boton);
         }
-
-        // completa las celdas vacías del mes
         while (grilla.getComponentCount() < 49) {
             grilla.add(new JLabel());
         }
-
-        mostrarActividadesDelDia(actividades);
         grilla.revalidate();
         grilla.repaint();
     }
@@ -2238,7 +2392,7 @@ public class InterfazPrincipal extends JFrame {
         DefaultTableModel modelo = new DefaultTableModel(
                 new String[]{
                         "Id", "Recurso", "Tipo", "Total",
-                        "Fuera de servicio", "Operativos", "Eventos a revisar"
+                        "Fuera de servicio", "En condiciones", "Eventos a revisar"
                 }, 0
         );
         JTable tabla = crearTabla(modelo);
@@ -2265,16 +2419,7 @@ public class InterfazPrincipal extends JFrame {
                 });
             }
 
-            TableRowSorter<DefaultTableModel> ordenador =
-                    new TableRowSorter<>(modelo);
-            java.util.Comparator<Object> numeros = (a, b) ->
-                    Integer.compare(
-                            ((Number) a).intValue(), ((Number) b).intValue()
-                    );
-            for (int columna : new int[]{0, 3, 4, 5, 6}) {
-                ordenador.setComparator(columna, numeros);
-            }
-            tabla.setRowSorter(ordenador);
+            tabla.setRowSorter(crearOrdenador(modelo, 0, 3, 4, 5, 6));
 
             for (int i = 0; i < modelo.getRowCount(); i++) {
                 if ((Integer) modelo.getValueAt(i, 0) == idSeleccionado) {
@@ -2312,10 +2457,7 @@ public class InterfazPrincipal extends JFrame {
         revisar.addActionListener(e -> {
             Recurso recurso = obtenerRecursoInventario(tabla, modelo);
             if (recurso != null) {
-                mostrarMensaje(
-                        gestor.obtenerResumenConflictosRecurso(recurso.getId()),
-                        "Revisión de reservas", JOptionPane.INFORMATION_MESSAGE
-                );
+                mostrarEventosARevisar(recurso, ventana);
             }
         });
         cerrar.addActionListener(e -> ventana.dispose());
@@ -2334,7 +2476,7 @@ public class InterfazPrincipal extends JFrame {
         acciones.add(cerrar);
 
         JLabel ayuda = new JLabel(
-                "<html>Operativos = total menos unidades fuera de servicio."
+                "<html>En condiciones = total menos unidades fuera de servicio."
                         + "<br>Las reservas se conservan. Los eventos a revisar "
                         + "son los que aún no terminaron y tienen un conflicto.</html>"
         );
@@ -2361,6 +2503,93 @@ public class InterfazPrincipal extends JFrame {
         ventana.setVisible(true);
     }
 
+    private void mostrarEventosARevisar(Recurso recurso, Window origen) {
+        List<Evento> afectados = gestor.obtenerEventosConConflictoDeRecurso(
+                recurso.getId()
+        );
+        if (afectados.isEmpty()) {
+            mostrarMensaje(
+                    gestor.obtenerResumenConflictosRecurso(recurso.getId()),
+                    "Revisión de reservas", JOptionPane.INFORMATION_MESSAGE
+            );
+            return;
+        }
+
+        JDialog ventana = new JDialog(
+                origen, "Eventos a revisar · " + recurso.getNombre(),
+                Dialog.ModalityType.APPLICATION_MODAL
+        );
+        ventana.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+        DefaultTableModel modelo = new DefaultTableModel(
+                new String[]{"Evento", "Fecha", "Inicio", "Fin", "Reserva"}, 0
+        );
+        for (Evento evento : afectados) {
+            modelo.addRow(new Object[]{
+                    evento.getNombre(), evento.getFecha(),
+                    evento.getHoraInicio(), evento.getHoraFin(),
+                    evento.obtenerCantidadAsignada(recurso)
+            });
+        }
+        JTable tabla = crearTabla(modelo);
+        tabla.setForeground(ROJO);
+        tabla.setSelectionForeground(ROJO);
+        tabla.setSelectionBackground(new Color(247, 215, 215));
+        tabla.setRowSorter(crearOrdenador(modelo, 1, 2, 3, 4));
+        tabla.getColumnModel().getColumn(0).setPreferredWidth(260);
+
+        JButton ir = crearBoton("Ir al evento", DORADO, AZUL);
+        JButton cerrar = crearBoton("Cerrar", Color.WHITE, AZUL);
+        tabla.getSelectionModel().addListSelectionListener(e ->
+                ir.setEnabled(tabla.getSelectedRow() >= 0)
+        );
+        ir.addActionListener(e -> {
+            int fila = tabla.getSelectedRow();
+            if (fila < 0) {
+                return;
+            }
+            Evento evento = afectados.get(tabla.convertRowIndexToModel(fila));
+            ventana.dispose();
+            if (origen != this) {
+                origen.dispose();
+            }
+            // muestra el evento aunque antes hubiera filtros activos
+            filtroEventos.setSelectedItem("Todos");
+            campoBusqueda.setText("");
+            actualizarEventos();
+            seleccionarEvento(evento.getId());
+            actualizarDetalle();
+            pestanas.setSelectedIndex(2);
+            seleccionarRecurso(recurso.getId());
+            tablaRecursos.requestFocusInWindow();
+        });
+        cerrar.addActionListener(e -> ventana.dispose());
+
+        JLabel ayuda = new JLabel(
+                "Seleccioná un evento y tocá Ir al evento. Se limpiarán los filtros de búsqueda."
+        );
+        ayuda.setForeground(GRIS);
+        JPanel acciones = new JPanel(new FlowLayout(FlowLayout.RIGHT, 7, 0));
+        acciones.setOpaque(false);
+        acciones.add(ir);
+        acciones.add(cerrar);
+        JPanel pie = new JPanel(new BorderLayout(0, 10));
+        pie.setOpaque(false);
+        pie.add(ayuda, BorderLayout.NORTH);
+        pie.add(acciones, BorderLayout.SOUTH);
+
+        JPanel contenido = new JPanel(new BorderLayout(0, 12));
+        contenido.setBackground(FONDO);
+        contenido.setBorder(new EmptyBorder(15, 15, 15, 15));
+        contenido.add(crearScroll(tabla), BorderLayout.CENTER);
+        contenido.add(pie, BorderLayout.SOUTH);
+        ventana.setContentPane(contenido);
+        ventana.setSize(790, 360);
+        ventana.setMinimumSize(new Dimension(740, 320));
+        ventana.setLocationRelativeTo(origen);
+        tabla.setRowSelectionInterval(0, 0);
+        ventana.setVisible(true);
+    }
+
     private Recurso obtenerRecursoInventario(
             JTable tabla, DefaultTableModel modelo
     ) {
@@ -2374,16 +2603,28 @@ public class InterfazPrincipal extends JFrame {
     }
 
     private void modificarFueraServicio(Recurso recurso) {
-        JTextField cantidad = new JTextField(
-                String.valueOf(recurso.getCantidadFueraServicio())
+        JSpinner cantidad = new JSpinner(new SpinnerNumberModel(
+                recurso.getCantidadFueraServicio(), 0,
+                recurso.getCantidadTotal(), 1
+        ));
+        JSpinner.NumberEditor editor = new JSpinner.NumberEditor(cantidad, "0");
+        cantidad.setEditor(editor);
+        editor.getTextField().setEditable(false);
+        cantidad.setToolTipText("Elegí con las flechas el total fuera de servicio");
+        JLabel vistaPrevia = new JLabel();
+        vistaPrevia.setFont(new Font("SansSerif", Font.BOLD, 13));
+        Runnable actualizarVista = () -> {
+            int restantes = recurso.getCantidadTotal() - (Integer) cantidad.getValue();
+            vistaPrevia.setText("Quedarán " + restantes + " de "
+                    + recurso.getCantidadTotal() + " unidades en condiciones.");
+            vistaPrevia.setForeground(restantes == 0 ? ROJO : AZUL);
+        };
+        cantidad.addChangeListener(e -> actualizarVista.run());
+        actualizarVista.run();
+        JPanel campos = crearCampos(
+                new String[]{"Recurso:", "Total en inventario:", "Fuera de servicio:"},
+                new JLabel(recurso.getNombre()), new JLabel(String.valueOf(recurso.getCantidadTotal())), cantidad
         );
-        JPanel campos = new JPanel(new GridLayout(0, 2, 10, 10));
-        campos.add(new JLabel("Recurso:"));
-        campos.add(new JLabel(recurso.getNombre()));
-        campos.add(new JLabel("Total en inventario:"));
-        campos.add(new JLabel(String.valueOf(recurso.getCantidadTotal())));
-        campos.add(new JLabel("Fuera de servicio:"));
-        campos.add(cantidad);
 
         JLabel ayuda = new JLabel(
                 "<html>Ingresá el total fuera de servicio, "
@@ -2395,15 +2636,19 @@ public class InterfazPrincipal extends JFrame {
 
         JPanel formulario = new JPanel(new BorderLayout(0, 14));
         formulario.add(campos, BorderLayout.CENTER);
-        formulario.add(ayuda, BorderLayout.SOUTH);
-        formulario.setPreferredSize(new Dimension(530, 190));
+        JPanel informacion = new JPanel(new BorderLayout(0, 8));
+        informacion.setOpaque(false);
+        informacion.add(vistaPrevia, BorderLayout.NORTH);
+        informacion.add(ayuda, BorderLayout.CENTER);
+        formulario.add(informacion, BorderLayout.SOUTH);
+        formulario.setPreferredSize(new Dimension(550, 220));
 
         while (confirmarFormulario(
                 formulario, "Estado de " + recurso.getNombre()
         )) {
             int unidades;
             try {
-                unidades = Integer.parseInt(cantidad.getText().trim());
+                unidades = (Integer) cantidad.getValue();
                 if (unidades < 0 || unidades > recurso.getCantidadTotal()) {
                     throw new IllegalArgumentException(
                             "La cantidad fuera de servicio debe estar entre 0 y "
@@ -2423,7 +2668,7 @@ public class InterfazPrincipal extends JFrame {
             int operativas = recurso.getCantidadTotal() - unidades;
             int respuesta = JOptionPane.showConfirmDialog(
                     this,
-                    "Quedarán " + operativas + " unidades operativas de "
+                    "Quedarán " + operativas + " unidades en condiciones de "
                             + recurso.getNombre() + ".\n"
                             + "Se conservarán las reservas y se señalarán "
                             + "los eventos afectados.\n¿Confirmás el cambio?",
@@ -2445,7 +2690,7 @@ public class InterfazPrincipal extends JFrame {
             }
 
             boolean guardado = guardarCambios();
-            actualizarDetalle();
+            actualizarEventos();
             if (guardado) {
                 mostrarEstado("Estado de " + recurso.getNombre() + " actualizado.");
             }
@@ -2472,18 +2717,17 @@ public class InterfazPrincipal extends JFrame {
             return;
         }
         long cantidad = gestor.obtenerEventosFuturos().stream()
-                .filter(evento -> gestor.tieneConflictosDeRecursos(evento.getId()))
+                .filter(this::eventoRequiereRevision)
                 .count();
 
         avisoConflictos.setText(
                 cantidad + " evento(s) necesitan revisar sus recursos. "
-                        + "Consultá Inventario de recursos."
+                        + "Usá el filtro A revisar o consultá Inventario de recursos."
         );
         avisoConflictos.setVisible(cantidad > 0);
 
         Evento evento = obtenerEventoSeleccionado();
-        if (evento != null && !evento.esPasado()
-                && gestor.tieneConflictosDeRecursos(evento.getId())) {
+        if (eventoRequiereRevision(evento)) {
             tituloDetalle.setForeground(ROJO);
             tituloDetalle.setText(evento.getNombre() + " · recursos a revisar");
         } else {
@@ -2517,6 +2761,7 @@ public class InterfazPrincipal extends JFrame {
     private void mostrarMensaje(String mensaje, String titulo, int tipo) {
         String texto = mensaje == null || mensaje.isBlank()
                 ? "No se pudo completar la operación." : mensaje;
+        texto = texto.replace("Unidades operativas:", "Unidades en condiciones:");
 
         if (texto.length() <= 300 && texto.lines().count() <= 5) {
             JOptionPane.showMessageDialog(this, texto, titulo, tipo);
