@@ -43,8 +43,12 @@ public class Evento {
         }
 
         validarDatos(
-                nombre, ubicacion, fecha,
-                horaInicio, horaFin, capacidad
+                nombre,
+                ubicacion,
+                fecha,
+                horaInicio,
+                horaFin,
+                capacidad
         );
 
         this.id = id;
@@ -71,8 +75,12 @@ public class Evento {
             int capacidad
     ) {
         validarDatos(
-                nombre, ubicacion, fecha,
-                horaInicio, horaFin, capacidad
+                nombre,
+                ubicacion,
+                fecha,
+                horaInicio,
+                horaFin,
+                capacidad
         );
 
         if (capacidad < asistentes.size()) {
@@ -86,7 +94,6 @@ public class Evento {
         for (LocalTime horaTarea : agenda.keySet()) {
             if (horaTarea.isBefore(horaInicio)
                     || horaTarea.isAfter(horaFin)) {
-
                 throw new IllegalArgumentException(
                         "El nuevo horario deja una tarea fuera del evento: "
                                 + horaTarea
@@ -159,7 +166,8 @@ public class Evento {
                 throw new IllegalArgumentException(
                         "Ya hay un asistente inscripto en este evento "
                                 + "con el documento "
-                                + asistente.getDocumento() + "."
+                                + asistente.getDocumento()
+                                + "."
                 );
             }
         }
@@ -222,6 +230,47 @@ public class Evento {
             LocalTime hora,
             String descripcionTarea
     ) {
+        validarTarea(hora, descripcionTarea);
+
+        // mantiene las tareas ordenadas por hora
+        agenda.put(hora, descripcionTarea.trim());
+    }
+
+    public void actualizarTarea(
+            LocalTime horaOriginal,
+            LocalTime nuevaHora,
+            String descripcionTarea
+    ) {
+        if (horaOriginal == null || !agenda.containsKey(horaOriginal)) {
+            throw new IllegalArgumentException(
+                    "No se encontró la tarea que querés modificar."
+            );
+        }
+
+        // valida antes de modificar la tarea original
+        validarTarea(nuevaHora, descripcionTarea);
+
+        if (!horaOriginal.equals(nuevaHora)
+                && agenda.containsKey(nuevaHora)) {
+            throw new IllegalArgumentException(
+                    "Ya existe otra tarea a las "
+                            + nuevaHora
+                            + ". Elegí un horario diferente."
+            );
+        }
+
+        agenda.put(nuevaHora, descripcionTarea.trim());
+
+        // si cambió la hora, retira la entrada anterior
+        if (!horaOriginal.equals(nuevaHora)) {
+            agenda.remove(horaOriginal);
+        }
+    }
+
+    private void validarTarea(
+            LocalTime hora,
+            String descripcionTarea
+    ) {
         if (hora == null) {
             throw new IllegalArgumentException(
                     "La hora de la tarea es obligatoria."
@@ -240,12 +289,15 @@ public class Evento {
                             + "del horario del evento."
             );
         }
-
-        // mantiene las tareas ordenadas por hora
-        agenda.put(hora, descripcionTarea.trim());
     }
 
     public void quitarTarea(LocalTime hora) {
+        if (hora == null) {
+            throw new IllegalArgumentException(
+                    "Seleccioná la tarea que querés eliminar."
+            );
+        }
+
         agenda.remove(hora);
     }
 

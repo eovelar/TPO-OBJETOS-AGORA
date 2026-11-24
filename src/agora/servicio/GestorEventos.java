@@ -8,6 +8,7 @@ import agora.persistencia.PersistenciaTXT;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -20,13 +21,18 @@ public class GestorEventos {
     private final List<Recurso> recursos;
     private final PersistenciaTXT persistencia;
 
+    private static final DateTimeFormatter FECHA =
+            DateTimeFormatter.ofPattern("dd/MM/yyyy");
+
+    private static final DateTimeFormatter HORA =
+            DateTimeFormatter.ofPattern("HH:mm");
+
     public GestorEventos() {
         eventos = new ArrayList<>();
         recursos = new ArrayList<>();
         persistencia = new PersistenciaTXT("datos");
     }
 
-    // la carga se realiza antes de empezar a registrar información
     public void cargarDatos() throws IOException {
         if (!eventos.isEmpty() || !recursos.isEmpty()) {
             throw new IllegalStateException(
@@ -93,7 +99,6 @@ public class GestorEventos {
         return null;
     }
 
-    // revisa los recursos antes de modificar el evento original
     public void actualizarEvento(
             int id,
             String nombre,
@@ -104,15 +109,9 @@ public class GestorEventos {
             LocalTime horaFin,
             int capacidad
     ) {
-        Evento evento = buscarEventoPorId(id);
+        Evento evento = exigirEvento(id);
 
-        if (evento == null) {
-            throw new IllegalArgumentException(
-                    "No se encontró el evento que querés modificar."
-            );
-        }
-
-        // permite validar la propuesta sin tocar los datos guardados
+        // valida la propuesta sin modificar el evento original
         Evento propuesta = new Evento(
                 id,
                 nombre,
@@ -124,53 +123,66 @@ public class GestorEventos {
                 capacidad
         );
 
-        if (capacidad < evento.getAsistentes().size()) {
+        int inscriptos = evento.getAsistentes().size();
+
+        if (capacidad < inscriptos) {
             throw new IllegalArgumentException(
-                    "La capacidad no puede ser menor "
-                            + "a la cantidad de asistentes registrados."
+                    "No se puede reducir la capacidad a "
+                            + capacidad
+                            + ". Hay "
+                            + inscriptos
+                            + " asistentes registrados.\n"
+                            + "Primero revisá las inscripciones.\n"
+                            + "El evento conserva sus datos anteriores."
             );
         }
 
-        // también comprueba que las tareas entren en el nuevo horario
         for (Map.Entry<LocalTime, String> tarea
                 : evento.getAgenda().entrySet()) {
 
-            propuesta.agregarTarea(
-                    tarea.getKey(),
-                    tarea.getValue()
-            );
-        }
+            LocalTime hora = tarea.getKey();
 
-        for (Map.Entry<Recurso, Integer> asignacion
-                : evento.getRecursosAsignados().entrySet()) {
-
-            Recurso recurso = asignacion.getKey();
-            int cantidadAsignada = asignacion.getValue();
-
-            int comprometida = calcularCantidadComprometida(
-                    recurso,
-                    propuesta
-            );
-
-            int disponible =
-                    recurso.getCantidadTotal() - comprometida;
-
-            if (cantidadAsignada > disponible) {
+            if (hora.isBefore(horaInicio) || hora.isAfter(horaFin)) {
                 throw new IllegalArgumentException(
-                        "No se puede cambiar la fecha o el horario.\n"
-                                + "El recurso \""
-                                + recurso.getNombre()
-                                + "\" está comprometido en otro evento.\n"
-                                + "Cantidad necesaria: "
-                                + cantidadAsignada
-                                + ". Disponible en ese horario: "
-                                + Math.max(0, disponible)
-                                + "."
+                        "No se puede confirmar el nuevo horario.\n"
+                                + "La tarea \""
+                                + tarea.getValue()
+                                + "\" de las "
+                                + hora.format(HORA)
+                                + " quedaría fuera del evento.\n"
+                                + "Horario propuesto: "
+                                + horaInicio.format(HORA)
+                                + " a "
+                                + horaFin.format(HORA)
+                                + ".\n"
+                                + "Revisá la agenda o elegí otro horario.\n"
+                                + "El evento conserva sus datos anteriores."
                 );
             }
         }
 
-        // solo modifica el evento cuando todas las comprobaciones pasan
+        // revisa las reservas con las unidades que pueden utilizarse
+        for (Map.Entry<Recurso, Integer> asignacion
+                : evento.getRecursosAsignados().entrySet()) {
+
+            Recurso recurso = asignacion.getKey();
+            int cantidad = asignacion.getValue();
+
+            if (cantidad > calcularDisponible(recurso, propuesta)) {
+                throw new IllegalArgumentException(
+                        "No se puede confirmar el cambio del evento.\n\n"
+                                + construirDetalleDisponibilidad(
+                                recurso,
+                                propuesta,
+                                cantidad
+                        )
+                                + "\n\nPodés elegir otro horario, revisar "
+                                + "las reservas o reorganizar los recursos.\n"
+                                + "El evento conserva sus datos anteriores."
+                );
+            }
+        }
+
         evento.actualizarDatos(
                 nombre,
                 descripcion,
@@ -185,11 +197,7 @@ public class GestorEventos {
     public boolean eliminarEvento(int id) {
         Evento evento = buscarEventoPorId(id);
 
-        if (evento == null) {
-            return false;
-        }
-
-        return eventos.remove(evento);
+        return evento != null && eventos.remove(evento);
     }
 
     public boolean inscribirAsistente(
@@ -202,8 +210,68 @@ public class GestorEventos {
             return false;
         }
 
-        // el evento controla los documentos duplicados y el cupo
         return evento.inscribirAsistente(asistente);
+    }
+
+    public void actualizarAsistente(
+            int idEvento,
+            int idAsistente,
+            String nombreCompleto,
+            String cargo,
+            String institucion,
+            String email
+    ) {
+        Asistente asistente = buscarAsistenteEnEvento(
+                idEvento,
+                idAsistente
+        );
+
+        if (asistente == null) {
+            throw new IllegalArgumentException(
+                    "No se encontró la inscripción que querés modificar."
+            );
+        }
+
+        asistente.actualizarDatos(
+                nombreCompleto,
+                cargo,
+                institucion,
+                email
+        );
+    }
+
+    public boolean cancelarInscripcion(
+            int idEvento,
+            int idAsistente
+    ) {
+        Evento evento = buscarEventoPorId(idEvento);
+
+        Asistente asistente = buscarAsistenteEnEvento(
+                idEvento,
+                idAsistente
+        );
+
+        if (evento == null || asistente == null) {
+            return false;
+        }
+
+        return evento.quitarAsistente(asistente);
+    }
+
+    private Asistente buscarAsistenteEnEvento(
+            int idEvento,
+            int idAsistente
+    ) {
+        Evento evento = buscarEventoPorId(idEvento);
+
+        if (evento == null) {
+            return null;
+        }
+
+        return evento.getAsistentes().stream()
+                .filter(asistente -> asistente.getId() == idAsistente)
+                .findFirst()
+                .orElse(null);
     }
 
     public boolean asignarRecurso(
@@ -218,19 +286,296 @@ public class GestorEventos {
             return false;
         }
 
-        int cantidadComprometida =
-                calcularCantidadComprometida(recurso, evento);
-
-        int cantidadDisponible =
-                recurso.getCantidadTotal() - cantidadComprometida;
-
-        if (cantidad > cantidadDisponible) {
+        if (cantidad > calcularDisponible(recurso, evento)) {
             return false;
         }
 
-        // reemplaza la cantidad anterior si el recurso ya estaba asignado
+        // reemplaza la reserva anterior, no suma otra cantidad
         evento.asignarRecurso(recurso, cantidad);
         return true;
+    }
+
+    public int obtenerCantidadDisponible(
+            int idEvento,
+            int idRecurso
+    ) {
+        Evento evento = exigirEvento(idEvento);
+        Recurso recurso = exigirRecurso(idRecurso);
+
+        return calcularDisponible(recurso, evento);
+    }
+
+    public String obtenerDetalleDisponibilidad(
+            int idEvento,
+            int idRecurso,
+            int cantidad
+    ) {
+        Evento evento = exigirEvento(idEvento);
+        Recurso recurso = exigirRecurso(idRecurso);
+
+        if (cantidad <= 0) {
+            throw new IllegalArgumentException(
+                    "La cantidad debe ser mayor que cero."
+            );
+        }
+
+        return construirDetalleDisponibilidad(
+                recurso,
+                evento,
+                cantidad
+        );
+    }
+
+    public boolean quitarRecursoAsignado(
+            int idEvento,
+            int idRecurso
+    ) {
+        Evento evento = buscarEventoPorId(idEvento);
+        Recurso recurso = buscarRecursoPorId(idRecurso);
+
+        if (evento == null || recurso == null
+                || evento.obtenerCantidadAsignada(recurso) == 0) {
+            return false;
+        }
+
+        // retira la reserva, pero conserva el inventario
+        evento.quitarRecurso(recurso);
+        return true;
+    }
+
+    public List<Evento> actualizarCantidadFueraServicio(
+            int idRecurso,
+            int cantidad
+    ) {
+        Recurso recurso = exigirRecurso(idRecurso);
+
+        // una rotura se registra aunque afecte reservas existentes
+        recurso.actualizarCantidadFueraServicio(cantidad);
+
+        return obtenerEventosConConflictoDeRecurso(idRecurso);
+    }
+
+    public List<Evento> obtenerEventosConConflictoDeRecurso(
+            int idRecurso
+    ) {
+        Recurso recurso = exigirRecurso(idRecurso);
+
+        // incluye eventos en curso y futuros, no los que ya terminaron
+        return obtenerEventosOrdenados().stream()
+                .filter(evento -> !evento.esPasado())
+                .filter(evento ->
+                        tieneConflictoDeRecurso(evento, recurso)
+                )
+                .toList();
+    }
+
+    public boolean tieneConflictosDeRecursos(int idEvento) {
+        Evento evento = exigirEvento(idEvento);
+
+        return evento.getRecursosAsignados().keySet().stream()
+                .anyMatch(recurso ->
+                        tieneConflictoDeRecurso(evento, recurso)
+                );
+    }
+
+    private boolean tieneConflictoDeRecurso(
+            Evento evento,
+            Recurso recurso
+    ) {
+        int asignada = evento.obtenerCantidadAsignada(recurso);
+
+        return asignada > 0
+                && asignada > calcularDisponible(recurso, evento);
+    }
+
+    public String obtenerResumenConflictosRecurso(int idRecurso) {
+        Recurso recurso = exigirRecurso(idRecurso);
+
+        List<Evento> afectados =
+                obtenerEventosConConflictoDeRecurso(idRecurso);
+
+        StringBuilder mensaje = new StringBuilder();
+
+        mensaje.append("Recurso: ")
+                .append(recurso.getNombre())
+                .append("\nUnidades en inventario: ")
+                .append(recurso.getCantidadTotal())
+                .append("\nFuera de servicio: ")
+                .append(recurso.getCantidadFueraServicio())
+                .append("\nUnidades operativas: ")
+                .append(recurso.getCantidadOperativa())
+                .append(".");
+
+        if (afectados.isEmpty()) {
+            mensaje.append(
+                    "\n\nNo hay eventos en curso o futuros "
+                            + "con reservas en conflicto para este recurso."
+            );
+        } else {
+            mensaje.append(
+                    "\n\nEventos cuyas reservas necesitan revisión:"
+            );
+
+            for (Evento evento : afectados) {
+                mensaje.append("\n- ")
+                        .append(evento.getNombre())
+                        .append(" (id ")
+                        .append(evento.getId())
+                        .append(")")
+                        .append("\n  ")
+                        .append(evento.getFecha().format(FECHA))
+                        .append(", ")
+                        .append(evento.getHoraInicio().format(HORA))
+                        .append(" a ")
+                        .append(evento.getHoraFin().format(HORA))
+                        .append(". Reserva: ")
+                        .append(evento.obtenerCantidadAsignada(recurso))
+                        .append(" unidad(es).");
+            }
+
+            mensaje.append(
+                    "\n\nLas reservas se conservaron. Revisá las cantidades, "
+                            + "los horarios o los recursos alternativos.\n"
+                            + "El sistema no decide qué evento tiene prioridad."
+            );
+        }
+
+        return mensaje.toString();
+    }
+
+    private Evento exigirEvento(int id) {
+        Evento evento = buscarEventoPorId(id);
+
+        if (evento == null) {
+            throw new IllegalArgumentException(
+                    "No se encontró el evento."
+            );
+        }
+
+        return evento;
+    }
+
+    private Recurso exigirRecurso(int id) {
+        Recurso recurso = buscarRecursoPorId(id);
+
+        if (recurso == null) {
+            throw new IllegalArgumentException(
+                    "No se encontró el recurso."
+            );
+        }
+
+        return recurso;
+    }
+
+    private int calcularDisponible(
+            Recurso recurso,
+            Evento evento
+    ) {
+        int comprometida = calcularCantidadComprometida(
+                recurso,
+                evento
+        );
+
+        // descuenta las unidades fuera de servicio y las otras reservas
+        return Math.max(
+                0,
+                recurso.getCantidadOperativa() - comprometida
+        );
+    }
+
+    private String construirDetalleDisponibilidad(
+            Recurso recurso,
+            Evento evento,
+            int cantidad
+    ) {
+        int comprometida = calcularCantidadComprometida(
+                recurso,
+                evento
+        );
+
+        int disponible = Math.max(
+                0,
+                recurso.getCantidadOperativa() - comprometida
+        );
+
+        StringBuilder mensaje = new StringBuilder();
+
+        mensaje.append("Recurso: ")
+                .append(recurso.getNombre())
+                .append("\nFecha: ")
+                .append(evento.getFecha().format(FECHA))
+                .append("\nHorario consultado: ")
+                .append(evento.getHoraInicio().format(HORA))
+                .append(" a ")
+                .append(evento.getHoraFin().format(HORA))
+                .append("\nUnidades en inventario: ")
+                .append(recurso.getCantidadTotal())
+                .append("\nFuera de servicio: ")
+                .append(recurso.getCantidadFueraServicio())
+                .append("\nUnidades operativas: ")
+                .append(recurso.getCantidadOperativa())
+                .append("\nCantidad solicitada para este evento: ")
+                .append(cantidad)
+                .append("\nMáximo uso simultáneo en otros eventos: ")
+                .append(comprometida)
+                .append("\nMáximo total que puede reservar este evento: ")
+                .append(disponible)
+                .append(".");
+
+        List<Evento> reservas = obtenerReservasCoincidentes(
+                recurso,
+                evento
+        );
+
+        if (reservas.isEmpty()) {
+            mensaje.append(
+                    "\n\nNo hay reservas de otros eventos "
+                            + "que coincidan con este horario."
+            );
+        } else {
+            mensaje.append(
+                    "\n\nReservas que coinciden con alguna parte "
+                            + "del horario consultado:"
+            );
+
+            for (Evento otro : reservas) {
+                mensaje.append("\n- ")
+                        .append(otro.getNombre())
+                        .append(" (id ")
+                        .append(otro.getId())
+                        .append("): ")
+                        .append(otro.getHoraInicio().format(HORA))
+                        .append(" a ")
+                        .append(otro.getHoraFin().format(HORA))
+                        .append(", ")
+                        .append(otro.obtenerCantidadAsignada(recurso))
+                        .append(" unidad(es).");
+            }
+
+            mensaje.append(
+                    "\n\nLas reservas pueden ocupar tramos diferentes. "
+                            + "El cálculo usa el máximo simultáneo, "
+                            + "no la suma de toda la lista."
+            );
+        }
+
+        mensaje.append(
+                "\nEl máximo para este evento incluye su reserva actual, "
+                        + "si ya tenía una."
+        );
+
+        return mensaje.toString();
+    }
+
+    private List<Evento> obtenerReservasCoincidentes(
+            Recurso recurso,
+            Evento evento
+    ) {
+        return obtenerEventosOrdenados().stream()
+                .filter(otro -> otro.getId() != evento.getId())
+                .filter(otro -> otro.seSuperponeCon(evento))
+                .filter(otro -> otro.obtenerCantidadAsignada(recurso) > 0)
+                .toList();
     }
 
     // calcula el máximo uso simultáneo dentro del horario consultado
@@ -241,7 +586,6 @@ public class GestorEventos {
         Map<LocalTime, Long> movimientos = new TreeMap<>();
 
         for (Evento otroEvento : eventos) {
-            // excluye el mismo evento, incluso al revisar una propuesta
             if (otroEvento.getId() == eventoActual.getId()
                     || !otroEvento.seSuperponeCon(eventoActual)) {
                 continue;
@@ -286,7 +630,10 @@ public class GestorEventos {
             maximoEnUso = Math.max(maximoEnUso, cantidadEnUso);
         }
 
-        return (int) Math.min(Integer.MAX_VALUE, maximoEnUso);
+        return (int) Math.min(
+                Integer.MAX_VALUE,
+                maximoEnUso
+        );
     }
 
     public List<Evento> obtenerEventosOrdenados() {
@@ -310,7 +657,6 @@ public class GestorEventos {
                 .toList();
     }
 
-    // incluye los eventos de hoy que todavía no terminaron
     public List<Evento> obtenerEventosProximos(int dias) {
         if (dias < 0) {
             throw new IllegalArgumentException(
@@ -341,7 +687,6 @@ public class GestorEventos {
                 .toList();
     }
 
-    // devuelve una copia para no modificar la colección desde afuera
     public List<Recurso> obtenerRecursos() {
         return List.copyOf(recursos);
     }
